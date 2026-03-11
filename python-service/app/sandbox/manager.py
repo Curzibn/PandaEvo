@@ -55,8 +55,7 @@ class SandboxManager:
         config = get_sandbox_config()
         client = await self._ensure_client()
 
-        workspace_root = get_workspace_root()
-        session_workspace = workspace_root / "code" / session_id
+        session_workspace = get_workspace_root()
         session_workspace.mkdir(parents=True, exist_ok=True)
 
         container_name = f"pandaevo-sandbox-{session_id}"

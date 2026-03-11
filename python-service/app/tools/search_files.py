@@ -8,7 +8,7 @@ from app.config import get_workspace_root
 from app.tools._utils import safe_path
 from app.tools.base import ToolDef
 
-_MAX_RESULTS = 50
+_MAX_RESULTS = 200
 _TEXT_SUFFIXES = {
     ".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml",
     ".toml", ".md", ".txt", ".html", ".css", ".env", ".sh", ".sql",

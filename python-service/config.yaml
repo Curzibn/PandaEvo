@@ -4,7 +4,7 @@ database:
   url: postgresql+asyncpg://user:password@localhost:5432/pandaevo
 
 workspace:
-  root: "/workspace"
+  root: "/"
 
 service:
   data_dir: "/app/data"
@@ -34,8 +34,8 @@ gitea:
 
 sandbox:
   image: "pandaevo/sandbox:latest"
-  mem_limit: "512m"
-  nano_cpus: 500000000
-  pids_limit: 64
-  network_mode: "none"
-  idle_timeout_s: 3600
+  mem_limit: "4g"
+  nano_cpus: 2000000000
+  pids_limit: 256
+  network_mode: "bridge"
+  idle_timeout_s: 86400

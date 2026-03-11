@@ -19,7 +19,7 @@ _TEXT_SUFFIXES = {
     ".cfg", ".ini", ".csv", ".xml",
 }
 
-_MAX_RESULTS = 50
+_MAX_RESULTS = 200
 
 _repo_ctx: ContextVar[Path | None] = ContextVar("coder_repo", default=None)
 _branch_ctx: ContextVar[str] = ContextVar("coder_branch", default="")

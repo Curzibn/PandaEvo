@@ -19,9 +19,9 @@ from app.skills.integrator import integrate_skill_content, integrate_skills_disc
 from app.skills.snapshot import get_skill_snapshot
 from app.tools import TOOLS_REGISTRY, dispatch, get_tool_schemas
 
-_MAX_ROUNDS = 10
+_MAX_ROUNDS = 50
 _SNAPSHOT_DEPTH = 2
-_SNAPSHOT_MAX_LINES = 100
+_SNAPSHOT_MAX_LINES = 300
 
 
 def _render_tree(node: dict[str, Any], indent: int = 0) -> list[str]:
@@ -94,7 +94,7 @@ def _build_system_prompt(
 
 {snapshot}
 
-注：`code/` 目录为本系统源代码（只读），包含 python-service、web-pc 等服务的完整代码，可通过 read_file / list_dir / search_files 自由查阅。
+注：`/apps` 目录为本系统源代码，包含 python-service、web-pc 等服务的完整代码，可通过 read_file / list_dir / search_files / write_file / edit_file / exec_shell 自由操作。
 
 ## 可用工具（可调用函数）
 

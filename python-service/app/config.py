@@ -43,6 +43,13 @@ def get_workspace_root() -> Path:
     return Path.cwd()
 
 
+def get_web_fs_root() -> Path:
+    raw: str = os.environ.get("WEB_FS_ROOT", "") or _cfg.get("workspace", {}).get("web_fs_root", "")
+    if raw:
+        return Path(raw).resolve()
+    return Path("/apps/workspace").resolve()
+
+
 def get_service_data_dir() -> Path:
     raw: str = _cfg.get("service", {}).get("data_dir", "")
     if raw:

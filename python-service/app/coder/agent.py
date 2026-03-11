@@ -8,7 +8,7 @@ from app.coder.tools import CODER_TOOLS, cleanup_clone, dispatch_coder
 from app.providers.llm import llm_provider
 from app.providers.store import ProviderLike
 
-_MAX_ROUNDS = 20
+_MAX_ROUNDS = 50
 
 _SYSTEM = """\
 你是一名资深全栈程序员，负责根据任务描述对本系统的应用服务代码进行修改，并通过 Gitea 创建 PR 进入代码审查流程。
