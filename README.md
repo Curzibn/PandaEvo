@@ -177,8 +177,8 @@ pnpm dev
 
 | 渠道 | 链接 |
 |---|---|
-| GitHub Releases | <!-- GITHUB_RELEASE_URL --> |
-| 夸克网盘 | <!-- QUARK_DOWNLOAD_URL --> |
+| GitHub Releases | https://github.com/Curzibn/PandaEvo/releases/tag/v0.1.0 |
+| 夸克网盘 | https://pan.quark.cn/s/bbbffc7fd4b4 |
 
 # ☕ 捐助
 

@@ -177,8 +177,8 @@ PandaEvo launched via the official installer includes the evolution core and ful
 
 | Channel | Link |
 |---|---|
-| GitHub Releases | <!-- GITHUB_RELEASE_URL --> |
-| Quark Drive | <!-- QUARK_DOWNLOAD_URL --> |
+| GitHub Releases | https://github.com/Curzibn/PandaEvo/releases/tag/v0.1.0 |
+| Quark Drive | https://pan.quark.cn/s/bbbffc7fd4b4 |
 
 # ☕ Donation
 
