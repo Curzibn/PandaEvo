@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pandaevo
+      POSTGRES_USER: pandaevo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pandaevo_dev}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pandaevo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  python-service:
+    image: pandaevo/python-service:latest
+    build: ./python-service
+    ports:
+      - "10600:10600"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://pandaevo:${POSTGRES_PASSWORD:-pandaevo_dev}@postgres:5432/pandaevo
+      GITEA_URL: ${GITEA_URL:-http://gitea:3000}
+      GITEA_TOKEN: ${GITEA_TOKEN:-}
+      GITEA_ORG: ${GITEA_ORG:-pandaevo}
+    volumes:
+      - ./python-service/config.yaml:/app/config.yaml:ro
+      - ./workspace:/workspace
+      - .:/workspace/code:ro
+      - ./AppData:/app/data
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web-pc:
+    image: pandaevo/web-pc:latest
+    build:
+      context: ./web-pc
+      dockerfile: ${WEB_PC_DOCKERFILE:-Dockerfile}
+    ports:
+      - "10601:10601"
+    volumes:
+      - ./web-pc:/app
+      - /app/node_modules
+    networks:
+      - internal
+    depends_on:
+      - python-service
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+    driver: bridge

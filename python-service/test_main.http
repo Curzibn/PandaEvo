@@ -1,0 +1,50 @@
+# ── Providers ────────────────────────────────────────────────────────────────
+
+### 获取已配置 API Key 的 Provider 与模型列表
+GET http://127.0.0.1:8000/providers
+Accept: application/json
+
+###
+
+# ── Sessions ─────────────────────────────────────────────────────────────────
+
+### 创建会话（指定模型）
+POST http://127.0.0.1:8000/sessions
+Content-Type: application/json
+
+{
+  "model": "gpt-4o-mini"
+}
+
+###
+
+### 获取会话信息（替换 {session_id} 为实际 ID）
+GET http://127.0.0.1:8000/sessions/{session_id}
+Accept: application/json
+
+###
+
+### 切换会话使用的模型
+PATCH http://127.0.0.1:8000/sessions/{session_id}/model
+Content-Type: application/json
+
+{
+  "model": "claude-3-5-sonnet-20241022"
+}
+
+###
+
+### 发送消息（SSE streaming 响应）
+POST http://127.0.0.1:8000/sessions/{session_id}/chat
+Content-Type: application/json
+
+{
+  "content": "你好，请介绍一下你自己"
+}
+
+###
+
+### 删除会话
+DELETE http://127.0.0.1:8000/sessions/{session_id}
+
+###

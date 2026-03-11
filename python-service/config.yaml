@@ -1,0 +1,41 @@
+env: prod
+
+database:
+  url: postgresql+asyncpg://user:password@localhost:5432/pandaevo
+
+workspace:
+  root: "/workspace"
+
+service:
+  data_dir: "/app/data"
+
+mcp:
+  builtin:
+    enabled: true
+    disabled: []
+  servers: []
+
+skills:
+  enabled: true
+  auto_match: true
+  max_skills: 3
+  entries: {}
+
+rules:
+  enabled: true
+  auto_match: true
+
+evolution_core:
+  url: "http://localhost:10602"
+
+gitea:
+  url: "http://gitea:3000"
+  org: "pandaevo"
+
+sandbox:
+  image: "pandaevo/sandbox:latest"
+  mem_limit: "512m"
+  nano_cpus: 500000000
+  pids_limit: 64
+  network_mode: "none"
+  idle_timeout_s: 3600
