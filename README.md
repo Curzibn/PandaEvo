@@ -179,3 +179,29 @@ pnpm dev
 |---|---|
 | GitHub Releases | <!-- GITHUB_RELEASE_URL --> |
 | 夸克网盘 | <!-- QUARK_DOWNLOAD_URL --> |
+
+# ☕ 捐助
+
+如果这个项目对您有帮助，欢迎通过以下方式支持我的工作。您的支持是我持续改进和维护这个项目的动力。
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center">
+<img src="images/alipay.png" width="300" alt="支付宝收款码" />
+</td>
+<td width="50"></td>
+<td align="center">
+<img src="images/wechat.png" width="300" alt="微信收款码" />
+</td>
+</tr>
+</table>
+
+</div>
+
+感谢您的支持！🙏
+
+## 开源协议
+
+本项目 `apps/` 子目录采用 [MIT License](LICENSE)。

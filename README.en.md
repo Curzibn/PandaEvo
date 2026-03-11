@@ -179,3 +179,29 @@ PandaEvo launched via the official installer includes the evolution core and ful
 |---|---|
 | GitHub Releases | <!-- GITHUB_RELEASE_URL --> |
 | Quark Drive | <!-- QUARK_DOWNLOAD_URL --> |
+
+# ☕ Donation
+
+If this project has been helpful to you, please consider supporting my work through the following methods. Your support is the motivation for me to continue improving and maintaining this project.
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center">
+<img src="images/alipay.png" width="300" alt="Alipay QR Code" />
+</td>
+<td width="50"></td>
+<td align="center">
+<img src="images/wechat.png" width="300" alt="WeChat QR Code" />
+</td>
+</tr>
+</table>
+
+</div>
+
+Thank you for your support! 🙏
+
+## License
+
+The `apps/` subproject is licensed under the [MIT License](LICENSE).
