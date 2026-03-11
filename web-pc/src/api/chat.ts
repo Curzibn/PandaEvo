@@ -1,5 +1,3 @@
-import { invoke } from '@tauri-apps/api/core'
-
 const BASE = '/api'
 
 export interface ModelItem {
@@ -111,69 +109,6 @@ export async function getSession(sessionId: string): Promise<Session> {
 
 export async function deleteSession(sessionId: string): Promise<void> {
   await fetch(`${BASE}/sessions/${sessionId}`, { method: 'DELETE' })
-}
-
-function parseDownloadFileName(contentDisposition: string | null): string {
-  if (!contentDisposition) return 'pandaevo-session-export.json'
-  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition)
-  if (utf8?.[1]) return decodeURIComponent(utf8[1])
-  const plain = /filename="([^"]+)"/i.exec(contentDisposition)
-  if (plain?.[1]) return plain[1]
-  return 'pandaevo-session-export.json'
-}
-
-export interface ExportSessionResult {
-  fileName: string
-  savedPath?: string
-  mode: 'tauri_dialog' | 'browser_download'
-}
-
-function isTauriRuntime(): boolean {
-  const w = window as unknown as { __TAURI__?: unknown; __TAURI_INTERNALS__?: unknown }
-  return Boolean(w.__TAURI__ || w.__TAURI_INTERNALS__)
-}
-
-function triggerBrowserDownload(blob: Blob, fileName: string): void {
-  const url = window.URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = fileName
-  a.click()
-  window.URL.revokeObjectURL(url)
-}
-
-async function fetchSessionExport(sessionId: string): Promise<{ blob: Blob; fileName: string }> {
-  const res = await fetch(`${BASE}/sessions/${sessionId}/export`)
-  if (!res.ok) {
-    let detail = 'Failed to export session'
-    try {
-      const payload = await res.json() as { detail?: string }
-      if (payload.detail) detail = payload.detail
-    } catch {}
-    throw new Error(detail)
-  }
-  const blob = await res.blob()
-  const fileName = parseDownloadFileName(res.headers.get('content-disposition'))
-  return { blob, fileName }
-}
-
-async function saveByTauriDialog(blob: Blob, fileName: string): Promise<string | undefined> {
-  const bytes = Array.from(new Uint8Array(await blob.arrayBuffer()))
-  const savedPath = await invoke<string | null>('save_export_file', { fileName, bytes })
-  if (savedPath === null) {
-    throw new Error('已取消导出')
-  }
-  return savedPath ?? undefined
-}
-
-export async function exportSession(sessionId: string): Promise<ExportSessionResult> {
-  const { blob, fileName } = await fetchSessionExport(sessionId)
-  if (isTauriRuntime()) {
-    const savedPath = await saveByTauriDialog(blob, fileName)
-    return { fileName, savedPath, mode: 'tauri_dialog' }
-  }
-  triggerBrowserDownload(blob, fileName)
-  return { fileName, mode: 'browser_download' }
 }
 
 export async function switchModel(sessionId: string, model: string): Promise<Session> {

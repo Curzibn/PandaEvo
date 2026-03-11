@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
 
 from app.agent import AgentRunner
 from app.db import async_session
@@ -130,48 +130,6 @@ def _summary_out(data: SessionSummary) -> SessionSummaryOut:
     )
 
 
-def _export_iso(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
-    return str(value)
-
-
-async def _load_session_plans(session_id: str) -> list[dict[str, Any]]:
-    async with async_session() as db:
-        result = await db.execute(
-            select(Plan).where(Plan.session_id == session_id).order_by(Plan.created_at.asc())
-        )
-        plans = result.scalars().all()
-    return [
-        {
-            "id": plan.id,
-            "tasks": plan.tasks,
-            "status": plan.status,
-            "created_at": _export_iso(plan.created_at),
-        }
-        for plan in plans
-    ]
-
-
-def _build_export_payload(data: SessionData, plans: list[dict[str, Any]]) -> dict[str, Any]:
-    return {
-        "schema_version": "1.0",
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "session": {
-            "id": data.id,
-            "title": data.title,
-            "model": data.model,
-            "created_at": data.created_at,
-        },
-        "messages": data.messages,
-        "plans": plans,
-        "meta": {
-            "source": "pandaevo",
-            "trace_mode": "full_trace",
-        },
-    }
-
-
 async def _resolve_provider(model: str):
     async with async_session() as db:
         row = await get_provider_for_model(db, model)
@@ -181,24 +139,6 @@ async def _resolve_provider(model: str):
             detail=f"Model '{model}' not found in any configured provider.",
         )
     return row
-
-
-@router.get("/{session_id}/export")
-async def export_session(session_id: str) -> Response:
-    data = await session_store.get(session_id)
-    if not data:
-        raise HTTPException(status_code=404, detail="Session not found.")
-
-    plans = await _load_session_plans(session_id)
-    payload = _build_export_payload(data, plans)
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    filename = f"pandaevo-session-{session_id}-{stamp}.json"
-    return Response(
-        content=body,
-        media_type="application/json; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 @router.get("", response_model=list[SessionSummaryOut])

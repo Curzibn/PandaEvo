@@ -344,7 +344,6 @@ Dockerfile 采用多阶段构建：
 1. 在 `src/api/chat.ts` 或 `src/api/providers.ts` 添加函数
 2. 定义 TypeScript 类型（请求/响应）
 3. 在组件中调用函数
-4. 下载类能力统一在 API 层封装（如 `exportSession(sessionId)`），组件层仅处理触发与反馈
 
 ### 添加新 UI 组件
 

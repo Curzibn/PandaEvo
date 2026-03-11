@@ -375,7 +375,6 @@ async def chat(...):
 1. 在对应的 `app/routers/*.py` 添加路由函数
 2. 若业务逻辑超过 10 行，抽取到对应职责模块
 3. 流式响应使用 `StreamingResponse`，普通响应使用 `JSONResponse`
-4. 会话导出类接口统一放在 `app/routers/sessions.py`，路径使用 `GET /sessions/{session_id}/export`，返回 `application/json` 附件下载
 
 ### 添加新数据库表
 
