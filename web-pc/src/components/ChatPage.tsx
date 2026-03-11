@@ -3,7 +3,7 @@ import appIcon from '../assets/app-icon.png'
 import { Bubble, Conversations, Sender, Think } from '@ant-design/x'
 import type { BubbleListProps } from '@ant-design/x'
 import XMarkdown from '@ant-design/x-markdown'
-import { Avatar, Button, Collapse, Flex, Select, Tag, Tooltip, Tree, Typography, Upload, theme as antdTheme } from 'antd'
+import { Avatar, Button, Collapse, Flex, Select, Tag, Tooltip, Tree, Typography, Upload, message, theme as antdTheme } from 'antd'
 import type { DataNode } from 'antd/es/tree'
 import { createStyles } from 'antd-style'
 import dayjs from 'dayjs'
@@ -12,6 +12,7 @@ import SettingsDrawer from './settings/SettingsDrawer'
 import {
   createSession,
   deleteSession,
+  exportSession,
   downloadFile,
   fetchFileTree,
   fetchProviders,
@@ -565,6 +566,24 @@ export default function ChatPage() {
     [convMeta, activeKey],
   )
 
+  const handleExportConversation = useCallback(async (convKey: string) => {
+    const meta = convMeta[convKey]
+    if (!meta) {
+      message.error('会话不存在或未加载')
+      return
+    }
+    try {
+      const result = await exportSession(meta.sessionId)
+      if (result.mode === 'tauri_dialog' && result.savedPath) {
+        message.success(`导出成功：${result.savedPath}`)
+      } else {
+        message.success('导出成功，文件已开始下载')
+      }
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '导出失败')
+    }
+  }, [convMeta])
+
   const handleSend = useCallback(
     async (content: string) => {
       if (!content.trim() || streaming) return
@@ -909,6 +928,12 @@ export default function ChatPage() {
           styles={{ item: { padding: '0 8px' } }}
           menu={(conv) => ({
             items: [
+              {
+                key: 'export',
+                label: '导出',
+                icon: <DownloadOutlined />,
+                onClick: () => handleExportConversation(conv.key),
+              },
               {
                 key: 'delete',
                 label: '删除',
