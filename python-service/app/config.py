@@ -208,6 +208,29 @@ def get_gitea_org() -> str:
     return os.environ.get("GITEA_ORG") or _cfg.get("gitea", {}).get("org", "pandaevo")
 
 
+def get_repo_sync_enabled() -> bool:
+    return bool(_cfg.get("repo_sync", {}).get("enabled", True))
+
+
+def get_repo_sync_root() -> Path:
+    raw: str = os.environ.get("REPO_SYNC_ROOT", "") or _cfg.get("repo_sync", {}).get("root", "")
+    if raw:
+        return Path(raw).resolve()
+    return Path("/apps/repos").resolve()
+
+
+def get_repo_sync_repos() -> list[str]:
+    repos = _cfg.get("repo_sync", {}).get("repos", ["python-service", "web-pc"])
+    if not isinstance(repos, list):
+        return ["python-service", "web-pc"]
+    clean = [str(repo).strip() for repo in repos if str(repo).strip()]
+    return clean or ["python-service", "web-pc"]
+
+
+def get_repo_sync_branch() -> str:
+    return str(_cfg.get("repo_sync", {}).get("branch", "main") or "main").strip() or "main"
+
+
 @dataclass
 class SandboxConfig:
     image: str = "pandaevo/sandbox:latest"

@@ -32,6 +32,14 @@ gitea:
   url: "http://gitea:3000"
   org: "pandaevo"
 
+repo_sync:
+  enabled: true
+  root: "/apps/repos"
+  repos:
+    - "python-service"
+    - "web-pc"
+  branch: "main"
+
 sandbox:
   image: "pandaevo/sandbox:latest"
   mem_limit: "4g"

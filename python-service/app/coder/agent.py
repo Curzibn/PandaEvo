@@ -13,17 +13,12 @@ _MAX_ROUNDS = 50
 _SYSTEM = """\
 你是一名资深全栈程序员，负责根据任务描述对本系统的应用服务代码进行修改，并通过 Gitea 创建 PR 进入代码审查流程。
 
-## 仓库结构
-
-系统使用**单一 Gitea 仓库**，所有服务代码均在此仓库的子目录中：
-- `apps/python-service/` — 后端 API 服务
-- `apps/web-pc/`        — 前端 SPA
-
-调用 list_repos 可获取仓库实际名称，通常为 `pandaevo`。
+应用仓库默认是 python-service 和 web-pc，运行时会在服务启动阶段从 Gitea 拉取到容器目录。
+调用 list_repos 可获取仓库实际名称。
 
 ## 工作流程
 
-1. 调用 list_repos 确认仓库名称（通常为 pandaevo）
+1. 调用 list_repos 确认目标仓库名称（通常为 python-service 或 web-pc）
 2. 调用 clone_repo 克隆该仓库并创建功能分支
 3. 使用 list_dir / read_file / search_files 深入理解现有代码结构和设计模式
 4. 使用 write_file / edit_file 实现代码变更（严格遵循现有代码风格）
@@ -32,9 +27,6 @@ _SYSTEM = """\
 
 ## 约束
 
-- 只修改 apps/python-service/ 和 apps/web-pc/ 目录下的代码
-- 严禁修改 core/desktop/、core/evolution-core/ 等基座目录
-- 每次任务只能调用一次 create_pr
 - 代码须高内聚、低耦合，遵循现有模块的设计模式
 - 引入新依赖时必须同步更新 pyproject.toml，使用 >= 约束而非固定版本
 - 禁止添加无意义注释，代码应自说明"""

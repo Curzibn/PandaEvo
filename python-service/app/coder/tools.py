@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import shutil
 import tempfile
@@ -8,10 +7,10 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
-from app.config import get_gitea_org, get_gitea_token, get_gitea_url
+from app.config import get_gitea_token
+from app.coder.gitea import build_repo_clone_url
+from app.gitops import run_git
 from app.tools.base import ToolDef
-
-_BLOCKED_REPOS = frozenset({"desktop", "evolution-core", "coder-core"})
 
 _TEXT_SUFFIXES = {
     ".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".yaml", ".yml",
@@ -49,14 +48,7 @@ def _safe_path(rel: str) -> Path:
 
 
 async def _run_git(*args: str, cwd: Path) -> tuple[int, str]:
-    proc = await asyncio.create_subprocess_exec(
-        "git", *args,
-        cwd=str(cwd),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-    )
-    stdout, _ = await proc.communicate()
-    return proc.returncode, stdout.decode("utf-8", errors="replace").strip()
+    return await run_git(list(args), cwd)
 
 
 def _build_tree(p: Path, depth: int) -> dict[str, Any]:
@@ -94,9 +86,6 @@ class CloneRepoTool(ToolDef):
         repo = args["repo"].strip()
         branch = args["branch"].strip()
 
-        if repo in _BLOCKED_REPOS:
-            return f"Error: modifying '{repo}' is forbidden. Only apps/ service repos are allowed."
-
         token = get_gitea_token()
         if not token:
             return (
@@ -105,9 +94,7 @@ class CloneRepoTool(ToolDef):
                 "Use list_repos to verify Gitea connectivity once the token is set."
             )
 
-        org = get_gitea_org()
-        base_url = get_gitea_url().rstrip("/")
-        clone_url = base_url.replace("://", f"://token:{token}@") + f"/{org}/{repo}.git"
+        clone_url = build_repo_clone_url(repo)
 
         tmp = Path(tempfile.mkdtemp(prefix="coder-"))
         repo_path = tmp / repo
@@ -337,12 +324,19 @@ class ListReposTool(ToolDef):
         result = await _list_repos()
         if result.get("success"):
             owner = result.get("owner", "")
+            owner_type = result.get("owner_type", "unknown")
             repos = result["repos"]
             if not repos:
-                return f"No repositories found under user '{owner}'."
-            lines = [f"Owner: {owner}", "Repositories:"] + [f"- {r}" for r in repos]
+                return f"No repositories found under '{owner}' ({owner_type})."
+            lines = [f"Owner: {owner} ({owner_type})"]
+            warning = result.get("warning")
+            if isinstance(warning, str) and warning:
+                lines.append(f"Warning: {warning}")
+            lines += ["Repositories:"] + [f"- {r}" for r in repos]
             return "\n".join(lines)
-        return f"Error listing repos: {result.get('error')}"
+        attempted = result.get("attempted")
+        attempted_text = f" attempted={attempted}" if attempted else ""
+        return f"Error listing repos: {result.get('error')}{attempted_text}"
 
 
 class CreatePRTool(ToolDef):

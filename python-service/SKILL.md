@@ -97,13 +97,14 @@ while True:
 
 工具调用结果通过 `role: tool` 消息追加到 `messages`，LLM 在下一轮看到工具返回值后继续推理。
 
-### 4. 任务编排：规划 → 执行 → 汇总
+### 4. 路由与任务编排：决策 → 规划 → 执行 → 汇总
 
-`orchestrator.py` 实现三阶段流程：
+`sessions.py` 与 `orchestrator.py` 协同实现四阶段流程：
 
-1. **规划**：调用 LLM 将用户请求拆解为子任务（1～5 个）
-2. **执行**：按拓扑排序分批并发执行（`type="evolution"` 转发到 evolution-core）
-3. **汇总**：调用 LLM 综合所有子任务结果为最终回答
+1. **决策**：调用会话模型输出 `route=direct|orchestrator` 与 `reason`
+2. **规划**：`route=orchestrator` 时调用 LLM 将请求拆解为子任务（1～5 个）
+3. **执行**：按拓扑排序分批并发执行（`type="evolution"` 转发到 evolution-core）
+4. **汇总**：默认调用 LLM 综合子任务结果；若仅单个轻量 `analysis` 任务则直接返回任务结果
 
 所有事件通过 async generator 流式返回。
 
@@ -120,6 +121,7 @@ data: {json}\n\n
 | type | 触发时机 | 关键字段 |
 |---|---|---|
 | `plan` | 任务计划生成 | `tasks` |
+| `route` | 路由决策完成 | `route`, `reason` |
 | `worker_start` | Worker 开始 | `task_id` |
 | `worker_event` | Worker 内部事件 | `task_id`, `event` |
 | `worker_done` | Worker 完成 | `task_id`, `result` |
@@ -165,6 +167,18 @@ python:3.11-slim (upstream)
 
 `docker-compose.yaml` 使用 `additional_contexts: PandaEvo-base: service:base` 确保构建顺序正确。
 
+### 7. 演化仓库同步链路
+
+首次打包运行时，desktop bootstrap 会将安装包内置的 `python-service` 与 `web-pc` 初始化为独立 Git 仓库并推送到 Gitea。
+
+python-service 每次启动会执行一次仓库同步：
+
+1. 读取 `repo_sync.repos`（默认 `python-service`、`web-pc`）
+2. 目标目录不存在时执行 clone
+3. 目标目录已存在时执行 `git pull --ff-only`
+
+同步入口：`main.py` 的 lifespan 调用 `app/repo_sync/service.py:startup_sync_repositories()`。
+
 ---
 
 ## 配置系统规范
@@ -180,6 +194,24 @@ python:3.11-slim (upstream)
 - `DATABASE_URL` → `database.url`
 
 其他配置项通过 YAML 文件管理，**不**支持环境变量覆盖。
+
+### 演化仓库同步配置
+
+`config.yaml` 新增 `repo_sync` 配置块：
+
+```yaml
+repo_sync:
+  enabled: true
+  root: "/apps/repos"
+  repos: ["python-service", "web-pc"]
+  branch: "main"
+```
+
+读取函数位于 `app/config.py`：
+- `get_repo_sync_enabled()`
+- `get_repo_sync_root()`
+- `get_repo_sync_repos()`
+- `get_repo_sync_branch()`
 
 ### 新增配置项
 
@@ -226,6 +258,12 @@ sandbox:
 ---
 
 ## 工具系统规范
+
+### Coder 仓库工具约定
+
+- `app/coder/tools.py` 中的 Coder 工具不再内置固定仓库黑名单，仓库可操作范围由运行时权限和调用上下文决定。
+- `app/coder/gitea.py:list_repos()` 采用 owner 自适应探测（org/user），并在 token 缺少读取 scope 时自动降级到无鉴权可见仓库查询。
+- 仓库发现失败时必须返回可诊断信息（endpoint、状态码、错误原因），避免仅返回笼统失败。
 
 ### 路径安全与会话隔离
 
@@ -376,6 +414,13 @@ async def chat(...):
 2. 若业务逻辑超过 10 行，抽取到对应职责模块
 3. 流式响应使用 `StreamingResponse`，普通响应使用 `JSONResponse`
 4. 会话导出类接口统一放在 `app/routers/sessions.py`，路径使用 `GET /sessions/{session_id}/export`，返回 `application/json` 附件下载
+
+### 修改聊天路由策略
+
+- `POST /sessions/{session_id}/chat` 支持两种路由控制：
+  - 显式兼容参数：`multi=true|false`
+  - 推荐参数：`route_mode=auto|direct|orchestrator`
+- 当 `route_mode=auto` 且未显式传 `multi` 时，后端使用会话模型输出 `route + reason` 决策执行路径
 
 ### 添加新数据库表
 

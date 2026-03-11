@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from app.db import engine
 from app.logger import setup_logging
 from app.mcp import initialize_mcp_servers, shutdown_mcp_servers
+from app.repo_sync import startup_sync_repositories
 from app.routers.fs import router as fs_router
 from app.routers.mcp import router as mcp_router
 from app.routers.providers import router as providers_router
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await run_migrations()
     
     await initialize_mcp_servers()
+    await startup_sync_repositories()
     try:
         yield
     finally:
