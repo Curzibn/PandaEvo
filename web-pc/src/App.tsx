@@ -14,6 +14,7 @@ export default function App() {
       setNeedsSetup(!list.some((p) => p.models.length > 0))
       setSetupChecked(true)
     }).catch(() => {
+      setNeedsSetup(true)
       setSetupChecked(true)
     })
   }, [])
