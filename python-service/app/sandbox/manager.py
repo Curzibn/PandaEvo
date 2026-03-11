@@ -60,23 +60,36 @@ class SandboxManager:
 
         container_name = f"pandaevo-sandbox-{session_id}"
 
-        host_config = client.api.create_host_config(
-            binds=[f"{session_workspace}:/workspace:rw"],
-            mem_limit=config.mem_limit,
-            nano_cpus=config.nano_cpus,
-            pids_limit=config.pids_limit,
-            network_mode=config.network_mode,
-            auto_remove=False,
-        )
+        try:
+            existing = await asyncio.to_thread(client.containers.get, container_name)
+            try:
+                await asyncio.to_thread(existing.start)
+            except docker.errors.APIError:
+                pass
+            sandbox = SessionSandbox(
+                container=existing,
+                session_id=session_id,
+                workspace_path=str(session_workspace),
+            )
+            self._sandboxes[session_id] = sandbox
+            return sandbox
+        except docker.errors.NotFound:
+            pass
 
         create_kwargs: dict[str, Any] = {
             "image": config.image,
             "name": container_name,
-            "host_config": host_config,
             "detach": True,
             "stdin_open": True,
             "tty": True,
             "command": ["/bin/bash"],
+            "volumes": {
+                str(session_workspace): {"bind": "/workspace", "mode": "rw"},
+            },
+            "mem_limit": config.mem_limit,
+            "nano_cpus": config.nano_cpus,
+            "pids_limit": config.pids_limit,
+            "network_mode": config.network_mode,
         }
 
         try:

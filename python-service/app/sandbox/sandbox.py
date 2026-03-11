@@ -27,12 +27,14 @@ class SessionSandbox:
         self.last_used_at = time.time()
         try:
             import asyncio
-            result = await asyncio.to_thread(
-                self.container.exec_run,
-                command,
-                workdir="/workspace",
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.container.exec_run,
+                    command,
+                    workdir="/workspace",
+                    demux=True,
+                ),
                 timeout=timeout,
-                demux=True,
             )
             exit_code, (stdout, stderr) = result
             output = (stdout or b"").decode("utf-8", errors="replace") + (
@@ -42,6 +44,8 @@ class SessionSandbox:
             if not output:
                 return f"(exit code {exit_code})"
             return output
+        except asyncio.TimeoutError:
+            return f"Error: command timed out after {timeout}s"
         except docker.errors.APIError as e:
             logger.error("Docker exec error for session %s: %s", self.session_id, e)
             return f"Error: Docker exec failed: {e}"
