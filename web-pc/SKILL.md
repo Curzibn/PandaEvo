@@ -194,6 +194,7 @@ export async function apiFunction(...args): Promise<ResponseType> {
 | 后端事件 | 前端回调 | UI 展示 |
 |---|---|---|
 | `plan` | `onPlan` | 任务计划卡片 |
+| `route` | `onRoute` | 路由决策信息 |
 | `worker_start` | `onWorkerStart` | Worker 开始标记 |
 | `worker_event` | `onWorkerEvent` | Worker 内部事件 |
 | `worker_done` | `onWorkerDone` | Worker 完成标记 |
@@ -360,6 +361,8 @@ Dockerfile 采用多阶段构建：
 - **消息状态**：`loading`、`content` 的管理
 - **流式渲染**：`onToken` 回调的处理
 - **工具调用**：`tool_group` 消息的展示
+
+`src/api/chat.ts` 的 `streamChat()` 默认向后端发送 `route_mode: "auto"`，由后端模型决定 `direct/orchestrator` 执行路径；如需兼容旧逻辑，可显式传 `multi`。
 
 ### 添加新事件类型
 

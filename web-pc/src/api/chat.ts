@@ -81,6 +81,12 @@ export interface WorkerDoneEvent {
   result: string
 }
 
+export interface RouteEvent {
+  type: 'route'
+  route: 'direct' | 'orchestrator'
+  reason: string
+}
+
 export async function listSessions(): Promise<SessionSummary[]> {
   const res = await fetch(`${BASE}/sessions`)
   if (!res.ok) throw new Error('Failed to list sessions')
@@ -245,12 +251,13 @@ export function streamChat(
   onWorkerStart?: (event: WorkerStartEvent) => void,
   onWorkerEvent?: (event: WorkerEventWrapper) => void,
   onWorkerDone?: (event: WorkerDoneEvent) => void,
+  onRoute?: (event: RouteEvent) => void,
 ): AbortController {
   const ctrl = new AbortController()
   fetch(`${BASE}/sessions/${sessionId}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, multi: true }),
+    body: JSON.stringify({ content, route_mode: 'auto' }),
     signal: ctrl.signal,
   })
     .then(async (res) => {
@@ -291,6 +298,8 @@ export function streamChat(
               onWorkerEvent?.(event as unknown as WorkerEventWrapper)
             } else if (event.type === 'worker_done') {
               onWorkerDone?.(event as unknown as WorkerDoneEvent)
+            } else if (event.type === 'route') {
+              onRoute?.(event as unknown as RouteEvent)
             }
           } catch {
             onToken(raw)

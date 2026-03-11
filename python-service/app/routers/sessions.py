@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
@@ -16,7 +16,7 @@ from app.db import async_session
 from app.providers.store import get_models_for_purpose, get_provider_for_model, resolved_to_provider_like
 from app.db.models import Plan
 from app.logger import get_logger
-from app.orchestrator import OrchestratorAgent
+from app.orchestrator import OrchestratorAgent, decide_route
 from app.providers.llm import llm_provider
 from app.sandbox import sandbox_manager
 from app.sessions.store import SessionData, SessionSummary, session_store
@@ -100,7 +100,8 @@ class ModelUpdate(BaseModel):
 
 class ChatMessage(BaseModel):
     content: str
-    multi: bool = True
+    multi: bool | None = None
+    route_mode: Literal["auto", "direct", "orchestrator"] = "auto"
 
 
 class TitleGenerateRequest(BaseModel):
@@ -303,8 +304,22 @@ async def chat(session_id: str, body: ChatMessage) -> StreamingResponse:
 
     worker_res = worker_candidates[0] if worker_candidates else None
 
-    def _event_stream() -> AsyncGenerator[dict[str, Any], None]:
-        if body.multi:
+    async def _resolve_route_mode() -> tuple[str, str]:
+        if body.multi is not None:
+            return ("orchestrator", "explicit: multi=true") if body.multi else ("direct", "explicit: multi=false")
+        if body.route_mode == "direct":
+            return "direct", "explicit: route_mode=direct"
+        if body.route_mode == "orchestrator":
+            return "orchestrator", "explicit: route_mode=orchestrator"
+        decision = await decide_route(
+            model=data.model,
+            messages=refreshed.messages,
+            provider=provider,
+        )
+        return decision.route, decision.reason
+
+    def _event_stream(route: str) -> AsyncGenerator[dict[str, Any], None]:
+        if route == "orchestrator":
             if worker_res is not None:
                 worker_model = worker_res.model_id
                 worker_provider = resolved_to_provider_like(worker_res)
@@ -347,8 +362,10 @@ async def chat(session_id: str, body: ChatMessage) -> StreamingResponse:
 
         try:
             assistant_tokens: list[str] = []
+            route, reason = await _resolve_route_mode()
+            yield f"data: {json.dumps({'type': 'route', 'route': route, 'reason': reason}, ensure_ascii=False)}\n\n"
 
-            async for event in _event_stream():
+            async for event in _event_stream(route):
                 etype = event["type"]
 
                 if etype == "token":
