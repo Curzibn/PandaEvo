@@ -26,7 +26,7 @@ rules:
   auto_match: true
 
 evolution_core:
-  url: "http://localhost:10602"
+  url: "http://evolution-core:10602"
 
 gitea:
   url: "http://gitea:3000"

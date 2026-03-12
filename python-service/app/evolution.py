@@ -31,7 +31,15 @@ class EvolutionAgent:
             key_raw = f"{repo}:{branch}:{pr_number}"
             payload["idempotency_key"] = sha1(key_raw.encode("utf-8")).hexdigest()
         if isinstance(instruction, str) and instruction.strip():
-            payload["prompt"] = instruction.strip()
+            pr_line = ""
+            if isinstance(pr_context, dict):
+                pr_line = (
+                    f"\n\n仓库：{pr_context.get('repo', '')}，"
+                    f"分支：{pr_context.get('branch', '')}，"
+                    f"PR #{pr_context.get('pr_number', '')}，"
+                    f"链接：{pr_context.get('pr_url', '')}"
+                )
+            payload["prompt"] = instruction.strip() + pr_line
         return payload
 
     async def run(
