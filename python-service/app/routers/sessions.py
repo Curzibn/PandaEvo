@@ -16,7 +16,8 @@ from app.db import async_session
 from app.providers.store import get_models_for_purpose, get_provider_for_model, resolved_to_provider_like
 from app.db.models import Plan
 from app.logger import get_logger
-from app.orchestrator import OrchestratorAgent, decide_route
+from app.config import get_enforce_code_tasks_via_orchestrator
+from app.orchestrator import OrchestratorAgent, decide_route, is_code_intent_request
 from app.providers.llm import llm_provider
 from app.sandbox import sandbox_manager
 from app.sessions.store import SessionData, SessionSummary, session_store
@@ -305,6 +306,8 @@ async def chat(session_id: str, body: ChatMessage) -> StreamingResponse:
     worker_res = worker_candidates[0] if worker_candidates else None
 
     async def _resolve_route_mode() -> tuple[str, str]:
+        if get_enforce_code_tasks_via_orchestrator() and is_code_intent_request(body.content):
+            return "orchestrator", "policy: code intent enforced"
         if body.multi is not None:
             return ("orchestrator", "explicit: multi=true") if body.multi else ("direct", "explicit: multi=false")
         if body.route_mode == "direct":
@@ -363,6 +366,7 @@ async def chat(session_id: str, body: ChatMessage) -> StreamingResponse:
         try:
             assistant_tokens: list[str] = []
             route, reason = await _resolve_route_mode()
+            logger.info("chat_route session_id=%s route=%s reason=%s", session_id, route, reason)
             yield f"data: {json.dumps({'type': 'route', 'route': route, 'reason': reason}, ensure_ascii=False)}\n\n"
 
             async for event in _event_stream(route):
@@ -402,6 +406,8 @@ async def chat(session_id: str, body: ChatMessage) -> StreamingResponse:
 
                 elif etype == "done":
                     new_msg: dict[str, Any] | None = event.get("new_message")
+                    done_status = str(event.get("status", "success"))
+                    artifacts = event.get("artifacts", {})
                     if new_msg:
                         thinking = new_msg.get("thinking")
                         content = "".join(assistant_tokens) or new_msg.get("content", "")
@@ -416,10 +422,13 @@ async def chat(session_id: str, body: ChatMessage) -> StreamingResponse:
 
                     if current_plan_id:
                         try:
-                            await _update_plan_status(current_plan_id, "completed")
+                            final_plan_status = "completed" if done_status == "success" else "failed"
+                            await _update_plan_status(current_plan_id, final_plan_status)
                         except Exception:
                             logger.exception("Failed to update plan status for session %s", session_id)
 
+                    logger.info("chat_done session_id=%s status=%s", session_id, done_status)
+                    yield f"data: {json.dumps({'type': 'done', 'status': done_status, 'artifacts': artifacts}, ensure_ascii=False)}\n\n"
                     yield "data: [DONE]\n\n"
                     return
 

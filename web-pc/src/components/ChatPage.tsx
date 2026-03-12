@@ -12,6 +12,7 @@ import SettingsDrawer from './settings/SettingsDrawer'
 import {
   createSession,
   deleteSession,
+  type DoneEvent,
   exportSession,
   downloadFile,
   fetchFileTree,
@@ -26,6 +27,7 @@ import {
   type ModelItem,
   type PlanEvent,
   type Provider,
+  type RouteEvent,
   type Session,
   type ToolCallEvent,
   type ToolResultEvent,
@@ -194,7 +196,7 @@ interface ToolStep {
 interface TaskItem {
   id: string
   title: string
-  status: 'pending' | 'running' | 'done'
+  status: 'pending' | 'running' | 'done' | 'failed'
   tokens: string
   result?: string
 }
@@ -219,6 +221,18 @@ interface ConvItem {
   key: string
   label: string
   group: string
+}
+
+interface RunSummary {
+  route?: 'direct' | 'orchestrator'
+  routeReason?: string
+  status?: 'success' | 'failed' | 'partial'
+  prs?: Array<{
+    repo: string
+    branch: string
+    pr_number: number | string
+    pr_url: string
+  }>
 }
 
 function getDateGroup(isoDate: string): string {
@@ -251,6 +265,16 @@ const COMPLIMENTS = [
 
 function getRandomCompliment(): string {
   return COMPLIMENTS[Math.floor(Math.random() * COMPLIMENTS.length)]
+}
+
+function isTaskResultFailed(raw: string): boolean {
+  if (!raw) return false
+  if (raw.includes('Error:') || raw.includes('Traceback')) return true
+  try {
+    const parsed = JSON.parse(raw) as { success?: boolean }
+    if (typeof parsed.success === 'boolean') return !parsed.success
+  } catch {}
+  return false
 }
 
 function deserializeMessages(
@@ -312,6 +336,9 @@ function TaskPlanBubble({ tasks }: { tasks: TaskItem[] }) {
                   )}
                   {task.status === 'done' && (
                     <CheckCircleOutlined style={{ color: token.colorSuccess, fontSize: 12 }} />
+                  )}
+                  {task.status === 'failed' && (
+                    <CheckCircleOutlined style={{ color: token.colorError, fontSize: 12 }} />
                   )}
                   {task.status === 'pending' && (
                     <span style={{ width: 12, height: 12, borderRadius: '50%', background: token.colorFill, display: 'inline-block' }} />
@@ -484,6 +511,7 @@ export default function ChatPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [complimentModalOpen, setComplimentModalOpen] = useState(false)
   const [currentCompliment, setCurrentCompliment] = useState('')
+  const [runSummary, setRunSummary] = useState<Record<string, RunSummary>>({})
 
   const abortRef = useRef<AbortController | null>(null)
   const msgKeyRef = useRef(0)
@@ -552,6 +580,7 @@ export default function ChatPage() {
     setConversations((prev) => [newConv, ...prev])
     setConvMeta((prev) => ({ ...prev, [convKey]: { sessionId: session.id, model: selectedModel } }))
     setMessages((prev) => ({ ...prev, [convKey]: [] }))
+    setRunSummary((prev) => ({ ...prev, [convKey]: {} }))
     setActiveKey(convKey)
     localStorage.setItem('activeSessionId', convKey)
     
@@ -590,6 +619,7 @@ export default function ChatPage() {
       setConversations((prev) => prev.filter((c) => c.key !== convKey))
       setConvMeta((prev) => { const n = { ...prev }; delete n[convKey]; return n })
       setMessages((prev) => { const n = { ...prev }; delete n[convKey]; return n })
+      setRunSummary((prev) => { const n = { ...prev }; delete n[convKey]; return n })
       if (activeKey === convKey) setActiveKey('')
     },
     [convMeta, activeKey],
@@ -636,6 +666,7 @@ export default function ChatPage() {
           [targetKey]: { sessionId: session.id, model: selectedModel },
         }))
         setMessages((prev) => ({ ...prev, [targetKey]: [] }))
+        setRunSummary((prev) => ({ ...prev, [targetKey]: {} }))
         setActiveKey(targetKey)
         localStorage.setItem('activeSessionId', targetKey)
       }
@@ -658,6 +689,14 @@ export default function ChatPage() {
           { key: toolGroupKey, role: 'tool_group', content: '[]' },
           { key: aiKey, role: 'assistant', content: '', loading: true },
         ],
+      }))
+      setRunSummary((prev) => ({
+        ...prev,
+        [targetKey]: {
+          ...prev[targetKey],
+          status: undefined,
+          prs: [],
+        },
       }))
       setStreaming(true)
 
@@ -808,6 +847,7 @@ export default function ChatPage() {
         (event: WorkerDoneEvent) => {
           setMessages((prev) => {
             const msgs = prev[targetKey] ?? []
+            const failed = isTaskResultFailed(event.result)
             return {
               ...prev,
               [targetKey]: msgs.map((m) => {
@@ -815,12 +855,32 @@ export default function ChatPage() {
                 return {
                   ...m,
                   tasks: m.tasks.map((t) =>
-                    t.id === event.task_id ? { ...t, status: 'done' as const, result: event.result } : t,
+                    t.id === event.task_id ? { ...t, status: failed ? 'failed' : 'done', result: event.result } : t,
                   ),
                 }
               }),
             }
           })
+        },
+        (event: RouteEvent) => {
+          setRunSummary((prev) => ({
+            ...prev,
+            [targetKey]: {
+              ...prev[targetKey],
+              route: event.route,
+              routeReason: event.reason,
+            },
+          }))
+        },
+        (event: DoneEvent) => {
+          setRunSummary((prev) => ({
+            ...prev,
+            [targetKey]: {
+              ...prev[targetKey],
+              status: event.status,
+              prs: event.artifacts?.prs ?? [],
+            },
+          }))
         },
       )
 
@@ -856,6 +916,7 @@ export default function ChatPage() {
   }, [])
 
   const currentMessages = messages[activeKey] ?? []
+  const currentSummary = runSummary[activeKey]
 
   const bubbleRole: BubbleListProps['role'] = {
     assistant: {
@@ -983,6 +1044,26 @@ export default function ChatPage() {
       </div>
 
       <div className={styles.chat}>
+        {activeKey && currentSummary && (
+          <Flex gap={8} align="center" style={{ minHeight: 24 }}>
+            {currentSummary.route && (
+              <Tag color={currentSummary.route === 'orchestrator' ? 'processing' : 'default'}>
+                route: {currentSummary.route}
+              </Tag>
+            )}
+            {currentSummary.status && (
+              <Tag color={currentSummary.status === 'success' ? 'success' : currentSummary.status === 'partial' ? 'warning' : 'error'}>
+                status: {currentSummary.status}
+              </Tag>
+            )}
+            {currentSummary.routeReason && <Text type="secondary">{currentSummary.routeReason}</Text>}
+            {currentSummary.prs && currentSummary.prs.length > 0 && (
+              <a href={currentSummary.prs[0].pr_url} target="_blank" rel="noreferrer">
+                PR #{currentSummary.prs[0].pr_number}
+              </a>
+            )}
+          </Flex>
+        )}
         {activeKey && currentMessages.length > 0 ? (
           <div className={styles.chatList}>
             <Bubble.List

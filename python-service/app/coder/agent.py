@@ -45,6 +45,14 @@ def _extract_text(msg: dict[str, Any]) -> str | None:
     return raw or None
 
 
+def _extract_json(content: str) -> dict[str, Any] | None:
+    try:
+        parsed = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _build_messages(
     original_messages: list[dict[str, Any]],
     prior_results: dict[str, str],
@@ -85,6 +93,7 @@ class CoderAgent:
         tools_schema = [t.to_schema() for t in CODER_TOOLS]
         messages = _build_messages(original_messages, prior_results, prompt)
         result_parts: list[str] = []
+        pr_artifact: dict[str, Any] | None = None
 
         try:
             for _ in range(_MAX_ROUNDS):
@@ -112,10 +121,28 @@ class CoderAgent:
                 if not tool_calls:
                     content = response.get("content", "")
                     messages.append({"role": "assistant", "content": content})
+                    if pr_artifact is None:
+                        fail_payload = {
+                            "success": False,
+                            "code": "PR_NOT_CREATED",
+                            "error": "Coder task ended without a successful create_pr result.",
+                        }
+                        yield {
+                            "type": "worker_done",
+                            "task_id": task_id,
+                            "result": json.dumps(fail_payload, ensure_ascii=False),
+                        }
+                        return
+                    result_payload = {
+                        "success": True,
+                        "code": "CODER_COMPLETED_WITH_PR",
+                        "data": pr_artifact,
+                        "message": "".join(result_parts) or content,
+                    }
                     yield {
                         "type": "worker_done",
                         "task_id": task_id,
-                        "result": "".join(result_parts) or content,
+                        "result": json.dumps(result_payload, ensure_ascii=False),
                     }
                     return
 
@@ -145,12 +172,41 @@ class CoderAgent:
                         "event": {"type": "tool_result", "id": call_id, "content": result},
                     }
 
+                    parsed_result = _extract_json(result)
+                    if (
+                        name == "create_pr"
+                        and parsed_result
+                        and parsed_result.get("success") is True
+                        and parsed_result.get("code") == "PR_CREATED"
+                    ):
+                        data = parsed_result.get("data")
+                        if isinstance(data, dict):
+                            pr_artifact = data
+
                     messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
 
+                if pr_artifact is not None:
+                    result_payload = {
+                        "success": True,
+                        "code": "CODER_COMPLETED_WITH_PR",
+                        "data": pr_artifact,
+                    }
+                    yield {
+                        "type": "worker_done",
+                        "task_id": task_id,
+                        "result": json.dumps(result_payload, ensure_ascii=False),
+                    }
+                    return
+
+            fail_payload = {
+                "success": False,
+                "code": "PR_NOT_CREATED",
+                "error": "Coder task ended without a successful create_pr result.",
+            }
             yield {
                 "type": "worker_done",
                 "task_id": task_id,
-                "result": "".join(result_parts),
+                "result": json.dumps(fail_payload, ensure_ascii=False),
             }
 
         finally:

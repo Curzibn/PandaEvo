@@ -25,6 +25,30 @@ _branch_ctx: ContextVar[str] = ContextVar("coder_branch", default="")
 _repo_name_ctx: ContextVar[str] = ContextVar("coder_repo_name", default="")
 
 
+def _ok(code: str, data: dict[str, Any] | None = None, message: str | None = None) -> str:
+    return json.dumps(
+        {
+            "success": True,
+            "code": code,
+            "message": message or "",
+            "data": data or {},
+        },
+        ensure_ascii=False,
+    )
+
+
+def _err(code: str, error: str, data: dict[str, Any] | None = None) -> str:
+    return json.dumps(
+        {
+            "success": False,
+            "code": code,
+            "error": error,
+            "data": data or {},
+        },
+        ensure_ascii=False,
+    )
+
+
 def get_clone_root() -> Path | None:
     return _repo_ctx.get()
 
@@ -288,26 +312,35 @@ class CommitAndPushTool(ToolDef):
     async def execute(self, args: dict[str, Any]) -> str:
         root = _repo_ctx.get()
         branch = _branch_ctx.get()
+        repo = _repo_name_ctx.get()
         if root is None:
-            return "Error: No repository cloned."
+            return _err("REPO_NOT_CLONED", "No repository cloned.")
         if not branch:
-            return "Error: No branch set."
+            return _err("BRANCH_NOT_SET", "No branch set.")
 
         rc, out = await _run_git("add", "-A", cwd=root)
         if rc != 0:
-            return f"Error: git add failed:\n{out}"
+            return _err("GIT_ADD_FAILED", f"git add failed:\n{out}")
 
         rc, out = await _run_git("commit", "-m", args["message"], cwd=root)
         if rc != 0:
             if "nothing to commit" in out:
-                return "Nothing to commit. No changes detected."
-            return f"Error: git commit failed:\n{out}"
+                return _err(
+                    "NO_CHANGES",
+                    "Nothing to commit. No changes detected.",
+                    {"repo": repo, "branch": branch},
+                )
+            return _err("GIT_COMMIT_FAILED", f"git commit failed:\n{out}")
 
         rc, out = await _run_git("push", "origin", branch, cwd=root)
         if rc != 0:
-            return f"Error: git push failed:\n{out}"
+            return _err("GIT_PUSH_FAILED", f"git push failed:\n{out}")
 
-        return f"Committed and pushed branch '{branch}' successfully."
+        return _ok(
+            "COMMIT_PUSH_SUCCESS",
+            {"repo": repo, "branch": branch},
+            f"Committed and pushed branch '{branch}' successfully.",
+        )
 
 
 class ListReposTool(ToolDef):
@@ -360,14 +393,29 @@ class CreatePRTool(ToolDef):
         repo = _repo_name_ctx.get()
         branch = _branch_ctx.get()
         if not repo:
-            return "Error: No repository cloned."
+            return _err("REPO_NOT_CLONED", "No repository cloned.")
         if not branch:
-            return "Error: No branch set."
+            return _err("BRANCH_NOT_SET", "No branch set.")
 
         result = await _create_pr(repo, branch, args["title"], args["body"])
         if result.get("success"):
-            return f"PR #{result['pr_number']} created: {result['url']}"
-        return f"Error creating PR: {result.get('error')}"
+            pr_number = result.get("pr_number")
+            pr_url = result.get("url")
+            return _ok(
+                "PR_CREATED",
+                {
+                    "repo": repo,
+                    "branch": branch,
+                    "pr_number": pr_number,
+                    "pr_url": pr_url,
+                },
+                f"PR #{pr_number} created: {pr_url}",
+            )
+        return _err(
+            "PR_CREATE_FAILED",
+            f"Error creating PR: {result.get('error')}",
+            {"repo": repo, "branch": branch},
+        )
 
 
 CODER_TOOLS: list[ToolDef] = [

@@ -231,6 +231,14 @@ def get_repo_sync_branch() -> str:
     return str(_cfg.get("repo_sync", {}).get("branch", "main") or "main").strip() or "main"
 
 
+def get_enforce_code_tasks_via_orchestrator() -> bool:
+    return bool(_cfg.get("orchestrator", {}).get("enforce_code_tasks_via_orchestrator", False))
+
+
+def get_auto_trigger_evolution_after_pr() -> bool:
+    return bool(_cfg.get("orchestrator", {}).get("auto_trigger_evolution_after_pr", True))
+
+
 @dataclass
 class SandboxConfig:
     image: str = "pandaevo/sandbox:latest"

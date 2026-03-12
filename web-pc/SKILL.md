@@ -202,13 +202,14 @@ export async function apiFunction(...args): Promise<ResponseType> {
 | `token` | `onToken` | 实时追加到消息 |
 | `tool_call` | `onToolCall` | 工具调用卡片 |
 | `tool_result` | `onToolResult` | 工具结果 |
-| `done` | `onDone` | 标记完成 |
+| `done` | `onDoneEvent` + `onDone` | 更新执行状态与产物后结束流 |
 
 ### 消息流式渲染
 
 - **流式渲染中**：`loading=true`，消息内容通过 `onToken` 实时追加
 - **流式完成**：`loading=false`，消息内容固定，停止追加
 - **工具调用**：折叠展示，点击展开查看参数和结果
+- **执行态展示**：消费 `route` 与 `done` 事件，展示 `route/reason`、`status(success/failed/partial)` 与 PR 链接
 
 **新增事件类型时**：
 1. 在 `src/api/chat.ts` 定义类型
@@ -363,6 +364,7 @@ Dockerfile 采用多阶段构建：
 - **工具调用**：`tool_group` 消息的展示
 
 `src/api/chat.ts` 的 `streamChat()` 默认向后端发送 `route_mode: "auto"`，由后端模型决定 `direct/orchestrator` 执行路径；如需兼容旧逻辑，可显式传 `multi`。
+当后端启用代码意图强制编排策略时，前端应以 `route` 事件为准展示实际执行路径。
 
 ### 添加新事件类型
 

@@ -87,6 +87,26 @@ export interface RouteEvent {
   reason: string
 }
 
+export interface DoneEvent {
+  type: 'done'
+  status: 'success' | 'failed' | 'partial'
+  artifacts?: {
+    prs?: Array<{
+      repo: string
+      branch: string
+      pr_number: number | string
+      pr_url: string
+    }>
+    failed_tasks?: Array<{
+      id: string
+      title: string
+      type: string
+      code: string
+      error: string
+    }>
+  }
+}
+
 export async function listSessions(): Promise<SessionSummary[]> {
   const res = await fetch(`${BASE}/sessions`)
   if (!res.ok) throw new Error('Failed to list sessions')
@@ -252,6 +272,7 @@ export function streamChat(
   onWorkerEvent?: (event: WorkerEventWrapper) => void,
   onWorkerDone?: (event: WorkerDoneEvent) => void,
   onRoute?: (event: RouteEvent) => void,
+  onDoneEvent?: (event: DoneEvent) => void,
 ): AbortController {
   const ctrl = new AbortController()
   fetch(`${BASE}/sessions/${sessionId}/chat`, {
@@ -300,6 +321,8 @@ export function streamChat(
               onWorkerDone?.(event as unknown as WorkerDoneEvent)
             } else if (event.type === 'route') {
               onRoute?.(event as unknown as RouteEvent)
+            } else if (event.type === 'done') {
+              onDoneEvent?.(event as unknown as DoneEvent)
             }
           } catch {
             onToken(raw)

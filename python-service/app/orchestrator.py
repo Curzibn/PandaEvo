@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from app.config import (
+    get_auto_trigger_evolution_after_pr,
+    get_enforce_code_tasks_via_orchestrator,
+)
 from app.providers.store import ProviderLike
 from app.coder.agent import CoderAgent
 from app.evolution import EvolutionAgent
@@ -76,6 +81,86 @@ class RouteDecision:
     reason: str
 
 
+_CODE_INTENT_RE = re.compile(
+    r"(修改|改下|修复|重构|实现|新增|删除|代码|commit|pr|pull request|gitea|提交)",
+    re.IGNORECASE,
+)
+
+
+def _latest_user_text(messages: list[dict[str, Any]]) -> str:
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            content = msg.get("content")
+            if isinstance(content, str):
+                return content
+    return ""
+
+
+def is_code_intent_request(text: str) -> bool:
+    if not text:
+        return False
+    return _CODE_INTENT_RE.search(text) is not None
+
+
+def _parse_json_dict(raw: str) -> dict[str, Any] | None:
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _normalize_task_result(task_type: str, raw: str) -> dict[str, Any]:
+    parsed = _parse_json_dict(raw) if isinstance(raw, str) else None
+    if parsed and isinstance(parsed.get("success"), bool):
+        success = bool(parsed.get("success"))
+        code = str(parsed.get("code", ""))
+        data = parsed.get("data")
+        return {
+            "raw": raw,
+            "success": success,
+            "code": code,
+            "data": data if isinstance(data, dict) else {},
+            "error": str(parsed.get("error", "")) if not success else "",
+        }
+
+    if task_type == "coder":
+        return {
+            "raw": raw,
+            "success": False,
+            "code": "CODER_RESULT_INVALID",
+            "data": {},
+            "error": "Coder result is not a structured JSON payload.",
+        }
+
+    text = raw or ""
+    failed = "Error:" in text or "Traceback" in text
+    return {
+        "raw": raw,
+        "success": not failed,
+        "code": "WORKER_ERROR" if failed else "OK",
+        "data": {},
+        "error": text if failed else "",
+    }
+
+
+def _extract_pr_artifact(normalized: dict[str, Any]) -> dict[str, Any] | None:
+    if not normalized.get("success"):
+        return None
+    data = normalized.get("data")
+    if not isinstance(data, dict):
+        return None
+    required = ("repo", "branch", "pr_number", "pr_url")
+    if all(data.get(k) for k in required):
+        return {
+            "repo": data["repo"],
+            "branch": data["branch"],
+            "pr_number": data["pr_number"],
+            "pr_url": data["pr_url"],
+        }
+    return None
+
+
 def _parse_route_decision(raw: str) -> RouteDecision:
     try:
         start = raw.find("{")
@@ -97,6 +182,10 @@ async def decide_route(
     messages: list[dict[str, Any]],
     provider: ProviderLike,
 ) -> RouteDecision:
+    if get_enforce_code_tasks_via_orchestrator():
+        if is_code_intent_request(_latest_user_text(messages)):
+            return RouteDecision(route="orchestrator", reason="policy: code intent enforced")
+
     route_messages = [
         {"role": "system", "content": _ROUTE_SYSTEM},
         *messages,
@@ -158,7 +247,7 @@ async def _run_batch_concurrent(
     orchestrator_provider: ProviderLike,
     worker_model: str,
     worker_provider: ProviderLike,
-    task_results: dict[str, str],
+    task_results: dict[str, dict[str, Any]],
     messages: list[dict[str, Any]],
 ) -> AsyncGenerator[dict[str, Any], None]:
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -169,7 +258,7 @@ async def _run_batch_concurrent(
             if task.type == "evolution":
                 stream = EvolutionAgent().run(task.id, task.prompt, orchestrator_model, orchestrator_provider)
             elif task.type == "coder":
-                prior = {tid: task_results[tid] for tid in task.depends_on if tid in task_results}
+                prior = {tid: task_results[tid]["raw"] for tid in task.depends_on if tid in task_results}
                 stream = CoderAgent().run(
                     task.id, task.prompt,
                     original_messages=messages,
@@ -182,12 +271,19 @@ async def _run_batch_concurrent(
             async for event in stream:
                 await queue.put(event)
                 if event["type"] == "worker_done":
-                    task_results[task.id] = event.get("result", "")
+                    raw_result = event.get("result", "")
+                    task_results[task.id] = _normalize_task_result(task.type, raw_result)
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("Worker %s failed", task.id)
-            task_results[task.id] = ""
+            task_results[task.id] = _normalize_task_result(
+                task.type,
+                json.dumps(
+                    {"success": False, "code": "WORKER_EXCEPTION", "error": f"Worker {task.id} failed unexpectedly"},
+                    ensure_ascii=False,
+                ),
+            )
             await queue.put({"type": "worker_done", "task_id": task.id, "result": ""})
         finally:
             await queue.put(None)
@@ -242,7 +338,7 @@ class OrchestratorAgent:
             ],
         }
 
-        task_results: dict[str, str] = {}
+        task_results: dict[str, dict[str, Any]] = {}
         batches = _topological_batches(tasks)
 
         for batch in batches:
@@ -257,6 +353,49 @@ class OrchestratorAgent:
             ):
                 yield event
 
+        if get_auto_trigger_evolution_after_pr() and not any(t.type == "evolution" for t in tasks):
+            extra_evolution_tasks: list[Task] = []
+            for task in tasks:
+                if task.type != "coder":
+                    continue
+                normalized = task_results.get(task.id, {})
+                artifact = _extract_pr_artifact(normalized)
+                if not artifact:
+                    continue
+                evo_id = f"{task.id}_evo"
+                extra_evolution_tasks.append(
+                    Task(
+                        id=evo_id,
+                        title=f"{task.title}-审查",
+                        type="evolution",
+                        depends_on=[],
+                        prompt=json.dumps(
+                            {
+                                "instruction": "请执行代码审查并给出是否可灰度发布结论。",
+                                "pr_context": {
+                                    "repo": artifact["repo"],
+                                    "branch": artifact["branch"],
+                                    "pr_number": artifact["pr_number"],
+                                    "pr_url": artifact["pr_url"],
+                                },
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
+                )
+            if extra_evolution_tasks:
+                tasks.extend(extra_evolution_tasks)
+                async for event in _run_batch_concurrent(
+                    extra_evolution_tasks,
+                    model,
+                    orchestrator_provider,
+                    worker_model,
+                    worker_provider,
+                    task_results,
+                    messages,
+                ):
+                    yield event
+
         if (
             len(tasks) == 1
             and tasks[0].type == "analysis"
@@ -264,13 +403,13 @@ class OrchestratorAgent:
         ):
             new_message = {
                 "role": "assistant",
-                "content": task_results.get(tasks[0].id, ""),
+                "content": task_results.get(tasks[0].id, {}).get("raw", ""),
             }
-            yield {"type": "done", "new_message": new_message}
+            yield {"type": "done", "status": "success", "new_message": new_message, "artifacts": {}}
             return
 
         results_text = "\n\n".join(
-            f"## {t.title}\n{task_results.get(t.id, '（无结果）')}"
+            f"## {t.title}\n{task_results.get(t.id, {}).get('raw', '（无结果）')}"
             for t in tasks
         )
         synthesize_messages = [
@@ -307,4 +446,40 @@ class OrchestratorAgent:
         if thinking_content:
             new_message["thinking"] = thinking_content
 
-        yield {"type": "done", "new_message": new_message}
+        failed_tasks = [
+            {
+                "id": t.id,
+                "title": t.title,
+                "type": t.type,
+                "code": task_results.get(t.id, {}).get("code", "UNKNOWN"),
+                "error": task_results.get(t.id, {}).get("error", ""),
+            }
+            for t in tasks
+            if not task_results.get(t.id, {}).get("success", False)
+        ]
+        pr_artifacts = [
+            artifact
+            for t in tasks
+            if t.type == "coder"
+            for artifact in [_extract_pr_artifact(task_results.get(t.id, {}))]
+            if artifact is not None
+        ]
+        status = "success"
+        if failed_tasks and pr_artifacts:
+            status = "partial"
+        elif failed_tasks:
+            status = "failed"
+
+        logger.info(
+            "orchestrator_done status=%s failed_tasks=%d prs=%d",
+            status,
+            len(failed_tasks),
+            len(pr_artifacts),
+        )
+
+        yield {
+            "type": "done",
+            "status": status,
+            "new_message": new_message,
+            "artifacts": {"prs": pr_artifacts, "failed_tasks": failed_tasks},
+        }

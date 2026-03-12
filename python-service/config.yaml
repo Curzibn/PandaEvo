@@ -40,6 +40,10 @@ repo_sync:
     - "web-pc"
   branch: "main"
 
+orchestrator:
+  enforce_code_tasks_via_orchestrator: false
+  auto_trigger_evolution_after_pr: true
+
 sandbox:
   image: "pandaevo/sandbox:latest"
   mem_limit: "4g"
