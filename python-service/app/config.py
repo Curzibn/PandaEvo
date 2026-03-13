@@ -239,6 +239,10 @@ def get_auto_trigger_evolution_after_pr() -> bool:
     return bool(_cfg.get("orchestrator", {}).get("auto_trigger_evolution_after_pr", True))
 
 
+def get_evolution_enabled() -> bool:
+    return os.environ.get("EVOLUTION_ENABLED", "false").strip().lower() == "true"
+
+
 @dataclass
 class SandboxConfig:
     image: str = "pandaevo/sandbox:latest"

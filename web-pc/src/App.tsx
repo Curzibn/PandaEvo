@@ -4,8 +4,10 @@ import zhCN from 'antd/locale/zh_CN'
 import { fetchProviders } from './api/chat'
 import ChatPage from './components/ChatPage'
 import SetupWizard from './components/SetupWizard'
+import { useReloadWebSocket } from './hooks/useReloadWebSocket'
 
 export default function App() {
+  useReloadWebSocket()
   const [needsSetup, setNeedsSetup] = useState(false)
   const [setupChecked, setSetupChecked] = useState(false)
 

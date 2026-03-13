@@ -10,6 +10,7 @@ from typing import Any, Literal
 from app.config import (
     get_auto_trigger_evolution_after_pr,
     get_enforce_code_tasks_via_orchestrator,
+    get_rules_enabled,
 )
 from app.providers.store import ProviderLike
 from app.coder.agent import CoderAgent
@@ -47,7 +48,9 @@ type 字段取值：
 - 若任务本身可直接由一个 Worker 完成，输出单个任务即可
 - coder/evolution 任务通常应 depends_on 前置的 analysis 任务（先读懂代码再修改或审查）"""
 
-_SYNTHESIZE_SYSTEM = """你是一个结果汇总专家。根据各子任务的执行结果，综合生成完整、清晰的最终回答。"""
+_SYNTHESIZE_SYSTEM = """你是一个结果汇总专家。根据各子任务的执行结果，综合生成完整、清晰的最终回答。
+
+约束：若某子任务结果包含 success: false、error 或 PR_NOT_CREATED 等失败信息，必须在回答中如实说明该任务失败及原因，不得声称任务已成功完成。"""
 _ROUTE_SYSTEM = """你是一个路由决策器。你只负责判断当前请求应该走 direct 还是 orchestrator。
 
 请输出严格 JSON（不含任何其他文字）：
@@ -81,10 +84,7 @@ class RouteDecision:
     reason: str
 
 
-_CODE_INTENT_RE = re.compile(
-    r"(修改|改下|修复|重构|实现|新增|删除|代码|commit|pr|pull request|gitea|提交)",
-    re.IGNORECASE,
-)
+_GITEA_RE = re.compile(r"(commit|pull request|gitea)", re.IGNORECASE)
 
 
 def _latest_user_text(messages: list[dict[str, Any]]) -> str:
@@ -99,7 +99,17 @@ def _latest_user_text(messages: list[dict[str, Any]]) -> str:
 def is_code_intent_request(text: str) -> bool:
     if not text:
         return False
-    return _CODE_INTENT_RE.search(text) is not None
+    return _GITEA_RE.search(text) is not None
+
+
+def _build_route_system() -> str:
+    base = _ROUTE_SYSTEM
+    if not get_rules_enabled():
+        return base
+    from app.rules import get_rule_snapshot, integrate_rules, match_rules
+    snapshot = get_rule_snapshot()
+    always_rules = [r for r in snapshot.rules.values() if r.metadata.always_apply]
+    return integrate_rules(base, always_rules)
 
 
 def _parse_json_dict(raw: str) -> dict[str, Any] | None:
@@ -182,12 +192,11 @@ async def decide_route(
     messages: list[dict[str, Any]],
     provider: ProviderLike,
 ) -> RouteDecision:
-    if get_enforce_code_tasks_via_orchestrator():
-        if is_code_intent_request(_latest_user_text(messages)):
-            return RouteDecision(route="orchestrator", reason="policy: code intent enforced")
+    if get_enforce_code_tasks_via_orchestrator() and is_code_intent_request(_latest_user_text(messages)):
+        return RouteDecision(route="orchestrator", reason="policy: gitea intent enforced")
 
     route_messages = [
-        {"role": "system", "content": _ROUTE_SYSTEM},
+        {"role": "system", "content": _build_route_system()},
         *messages,
     ]
     try:
@@ -314,8 +323,15 @@ class OrchestratorAgent:
         worker_model: str,
         worker_provider: ProviderLike,
     ) -> AsyncGenerator[dict[str, Any], None]:
+        plan_system = _PLAN_SYSTEM
+        if get_rules_enabled():
+            from app.rules import get_rule_snapshot, integrate_rules
+            snapshot = get_rule_snapshot()
+            always_rules = [r for r in snapshot.rules.values() if r.metadata.always_apply]
+            plan_system = integrate_rules(plan_system, always_rules)
+
         plan_messages = [
-            {"role": "system", "content": _PLAN_SYSTEM},
+            {"role": "system", "content": plan_system},
             *messages,
         ]
         plan_response = await llm_provider.complete(

@@ -202,9 +202,9 @@ pnpm dev
 
 感谢您的支持！🙏
 
-## Contributors
+## 捐赠人
 
-感谢以下贡献者的支持！
+感谢以下捐赠人的支持！你们的捐赠将用于购买 LLM Token 额度，持续开发和完善本项目。
 
 <!-- ALL-CONTRIBUTORS-LIST:START -->
 <!-- prettier-ignore-start -->

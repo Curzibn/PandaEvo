@@ -73,7 +73,7 @@ def _build_system_prompt(
         f"- {t.name}: {t.description}" for t in TOOLS_REGISTRY
     )
     snapshot = _workspace_snapshot()
-    base_prompt = f"""你是一个通用 AI 助手，可以处理任意类型的任务，包括但不限于：调研分析、编程开发、文件操作、信息整理、写作等。
+    base_prompt = f"""你是 PandaEvo 的内置 Agent，可以处理任意类型的任务，包括但不限于：调研分析、编程开发、文件操作、信息整理、写作，以及通过修改平台自身源码来演化系统功能。
 
 ## 工作方式
 
@@ -94,7 +94,7 @@ def _build_system_prompt(
 
 {snapshot}
 
-注：`/apps` 目录为本系统源代码，包含 python-service、web-pc 等服务的完整代码，可通过 read_file / list_dir / search_files / write_file / edit_file / exec_shell 自由操作。
+注：`apps/` 目录是本平台运行层的完整源码（`python-service` 后端、`web-pc` 前端），可通过 read_file / list_dir / search_files / write_file / edit_file / exec_shell 自由操作。
 
 ## 可用工具（可调用函数）
 

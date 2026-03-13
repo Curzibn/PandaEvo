@@ -202,9 +202,9 @@ If this project has been helpful to you, please consider supporting my work thro
 
 Thank you for your support! 🙏
 
-## Contributors
+## Donors
 
-Thanks to the following contributors for their support!
+Thanks to the following donors for their support. These donations are used to purchase LLM token credits for continuously developing and improving this project.
 
 <!-- ALL-CONTRIBUTORS-LIST:START -->
 <!-- prettier-ignore-start -->

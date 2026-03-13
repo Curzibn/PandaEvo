@@ -16,7 +16,7 @@ from app.db import async_session
 from app.providers.store import get_models_for_purpose, get_provider_for_model, resolved_to_provider_like
 from app.db.models import Plan
 from app.logger import get_logger
-from app.config import get_enforce_code_tasks_via_orchestrator
+from app.config import get_auto_trigger_evolution_after_pr, get_enforce_code_tasks_via_orchestrator, get_evolution_enabled
 from app.orchestrator import OrchestratorAgent, decide_route, is_code_intent_request
 from app.providers.llm import llm_provider
 from app.sandbox import sandbox_manager
@@ -369,6 +369,9 @@ async def chat(session_id: str, body: ChatMessage) -> StreamingResponse:
             logger.info("chat_route session_id=%s route=%s reason=%s", session_id, route, reason)
             yield f"data: {json.dumps({'type': 'route', 'route': route, 'reason': reason}, ensure_ascii=False)}\n\n"
 
+            if route == "orchestrator" and not get_evolution_enabled() and get_auto_trigger_evolution_after_pr():
+                yield f"data: {json.dumps({'type': 'evolution_disabled_warning', 'message': '演化功能已关闭，PR 创建后不会执行自动代码审查。如需启用，请在设置中开启演化。'}, ensure_ascii=False)}\n\n"
+
             async for event in _event_stream(route):
                 etype = event["type"]
 
@@ -428,7 +431,12 @@ async def chat(session_id: str, body: ChatMessage) -> StreamingResponse:
                             logger.exception("Failed to update plan status for session %s", session_id)
 
                     logger.info("chat_done session_id=%s status=%s", session_id, done_status)
-                    yield f"data: {json.dumps({'type': 'done', 'status': done_status, 'artifacts': artifacts}, ensure_ascii=False)}\n\n"
+                    done_payload: dict[str, Any] = {"type": "done", "status": done_status, "artifacts": artifacts}
+                    if new_msg:
+                        thinking = new_msg.get("thinking")
+                        content = "".join(assistant_tokens) or new_msg.get("content", "")
+                        done_payload["new_message"] = {"content": content, "thinking": thinking}
+                    yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
                     yield "data: [DONE]\n\n"
                     return
 

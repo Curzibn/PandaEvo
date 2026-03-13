@@ -5,6 +5,9 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+from app.repo_sync import post_merge_sync
 
 router = APIRouter()
 
@@ -38,6 +41,23 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         async with _lock:
             if websocket in _connections:
                 _connections.remove(websocket)
+
+
+class _SyncRequest(BaseModel):
+    repo: str
+
+
+@router.post("/internal/sync")
+async def internal_sync(body: _SyncRequest) -> JSONResponse:
+    try:
+        await post_merge_sync(body.repo)
+        await _broadcast({"type": "reload"})
+        return JSONResponse({"ok": True, "repo": body.repo})
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": str(exc)},
+            status_code=500,
+        )
 
 
 @router.post("/internal/reload")

@@ -87,9 +87,15 @@ export interface RouteEvent {
   reason: string
 }
 
+export interface EvolutionDisabledWarningEvent {
+  type: 'evolution_disabled_warning'
+  message: string
+}
+
 export interface DoneEvent {
   type: 'done'
   status: 'success' | 'failed' | 'partial'
+  new_message?: { content?: string; thinking?: string }
   artifacts?: {
     prs?: Array<{
       repo: string
@@ -273,6 +279,7 @@ export function streamChat(
   onWorkerDone?: (event: WorkerDoneEvent) => void,
   onRoute?: (event: RouteEvent) => void,
   onDoneEvent?: (event: DoneEvent) => void,
+  onEvolutionDisabledWarning?: (event: EvolutionDisabledWarningEvent) => void,
 ): AbortController {
   const ctrl = new AbortController()
   fetch(`${BASE}/sessions/${sessionId}/chat`, {
@@ -321,6 +328,8 @@ export function streamChat(
               onWorkerDone?.(event as unknown as WorkerDoneEvent)
             } else if (event.type === 'route') {
               onRoute?.(event as unknown as RouteEvent)
+            } else if (event.type === 'evolution_disabled_warning') {
+              onEvolutionDisabledWarning?.(event as unknown as EvolutionDisabledWarningEvent)
             } else if (event.type === 'done') {
               onDoneEvent?.(event as unknown as DoneEvent)
             }

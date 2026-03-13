@@ -65,6 +65,14 @@ class EvolutionAgent:
                 f"{url}/run",
                 json=self._build_payload(task_id, prompt),
             ) as resp:
+                if resp.status_code == 403:
+                    yield {"type": "worker_start", "task_id": task_id}
+                    yield {
+                        "type": "worker_done",
+                        "task_id": task_id,
+                        "result": "演化功能已关闭，请在设置中开启演化。",
+                    }
+                    return
                 async for line in resp.aiter_lines():
                     if line.startswith("data: "):
                         yield json.loads(line[6:])

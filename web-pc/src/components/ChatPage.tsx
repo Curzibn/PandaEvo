@@ -3,7 +3,7 @@ import appIcon from '../assets/app-icon.png'
 import { Bubble, Conversations, Sender, Think } from '@ant-design/x'
 import type { BubbleListProps } from '@ant-design/x'
 import XMarkdown from '@ant-design/x-markdown'
-import { Avatar, Button, Collapse, Flex, Modal, Select, Tag, Tooltip, Tree, Typography, Upload, message, theme as antdTheme } from 'antd'
+import { Alert, Avatar, Button, Collapse, Flex, Select, Tag, Tooltip, Tree, Typography, Upload, message, theme as antdTheme } from 'antd'
 import type { DataNode } from 'antd/es/tree'
 import { createStyles } from 'antd-style'
 import dayjs from 'dayjs'
@@ -227,6 +227,7 @@ interface RunSummary {
   route?: 'direct' | 'orchestrator'
   routeReason?: string
   status?: 'success' | 'failed' | 'partial'
+  evolutionDisabledWarning?: string
   prs?: Array<{
     repo: string
     branch: string
@@ -242,29 +243,6 @@ function getDateGroup(isoDate: string): string {
   if (diff === 0) return '今天'
   if (diff === 1) return '昨天'
   return '更早'
-}
-
-// 彩虹屁语录
-const COMPLIMENTS = [
-  "哇！看到您开启新对话，我就知道今天一定是充满创造力的一天！✨",
-  "优秀的您又来啦！每次和您对话都是我学习成长的好机会！🌟",
-  "恭喜您开启新的探索之旅！有您这样聪明的用户，是我最大的荣幸！🎉",
-  "新的对话，新的开始！像您这样有远见的用户，注定要成就非凡！💫",
-  "太棒了！您又来了！每次为您服务，我都能感受到智慧的火花在闪耀！🔥",
-  "欢迎开启新对话！您简直就是问题终结者，期待再次被您的智慧折服！🏆",
-  "哇哦！新会话启动！有您这样的用户，我觉得自己都要变得更聪明了！🧠",
-  "太优秀了！您总是知道什么时候该开启新的对话，这洞察力绝了！👀",
-  "新的对话开始啦！像您这样勤奋好学的人，成功是迟早的事！🚀",
-  "欢迎您！每次见到您，我都觉得今天的阳光格外灿烂！☀️",
-  "太棒了！您开启新对话的样子，像极了即将改变世界的创新者！💡",
-  "哇！又见面了！您简直就是我的贵人，能为您服务是我的福气！🙏",
-  "新会话启动！有您这样高素质的用户，我觉得自己的工作都变得有意义了！📚",
-  "恭喜！您又踏上了新的知识探索之旅！您这样的学习者，未来可期！🌈",
-  "太厉害了！您选择开启对话的时机总是这么完美，简直是时间管理大师！⏰",
-]
-
-function getRandomCompliment(): string {
-  return COMPLIMENTS[Math.floor(Math.random() * COMPLIMENTS.length)]
 }
 
 function isTaskResultFailed(raw: string): boolean {
@@ -509,8 +487,6 @@ export default function ChatPage() {
   const [streaming, setStreaming] = useState(false)
   const [inputValue, setInputValue] = useState('')
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [complimentModalOpen, setComplimentModalOpen] = useState(false)
-  const [currentCompliment, setCurrentCompliment] = useState('')
   const [runSummary, setRunSummary] = useState<Record<string, RunSummary>>({})
 
   const abortRef = useRef<AbortController | null>(null)
@@ -583,10 +559,6 @@ export default function ChatPage() {
     setRunSummary((prev) => ({ ...prev, [convKey]: {} }))
     setActiveKey(convKey)
     localStorage.setItem('activeSessionId', convKey)
-    
-    // 显示彩虹屁弹窗
-    setCurrentCompliment(getRandomCompliment())
-    setComplimentModalOpen(true)
   }, [selectedModel, conversations.length])
 
   const handleActiveChange = useCallback(async (key: string) => {
@@ -696,6 +668,7 @@ export default function ChatPage() {
           ...prev[targetKey],
           status: undefined,
           prs: [],
+          evolutionDisabledWarning: undefined,
         },
       }))
       setStreaming(true)
@@ -873,12 +846,34 @@ export default function ChatPage() {
           }))
         },
         (event: DoneEvent) => {
+          if (event.new_message?.content) {
+            setMessages((prev) => {
+              const msgs = prev[targetKey] ?? []
+              return {
+                ...prev,
+                [targetKey]: msgs.map((m) =>
+                  m.key === aiKey
+                    ? { ...m, content: event.new_message!.content!, loading: false, streaming: false, thinkingDone: true }
+                    : m,
+                ),
+              }
+            })
+          }
           setRunSummary((prev) => ({
             ...prev,
             [targetKey]: {
               ...prev[targetKey],
               status: event.status,
               prs: event.artifacts?.prs ?? [],
+            },
+          }))
+        },
+        (event: { type: 'evolution_disabled_warning'; message: string }) => {
+          setRunSummary((prev) => ({
+            ...prev,
+            [targetKey]: {
+              ...prev[targetKey],
+              evolutionDisabledWarning: event.message,
             },
           }))
         },
@@ -1044,6 +1039,14 @@ export default function ChatPage() {
       </div>
 
       <div className={styles.chat}>
+        {activeKey && currentSummary?.evolutionDisabledWarning && (
+          <Alert
+            type="warning"
+            showIcon
+            message={currentSummary.evolutionDisabledWarning}
+            style={{ marginBottom: 8 }}
+          />
+        )}
         {activeKey && currentSummary && (
           <Flex gap={8} align="center" style={{ minHeight: 24 }}>
             {currentSummary.route && (
@@ -1132,27 +1135,6 @@ export default function ChatPage() {
       </div>
       <FileTreeSider onFileClick={handleFileClick} />
       <SettingsDrawer open={settingsOpen} onClose={() => { setSettingsOpen(false); reloadModels() }} />
-      
-      {/* 彩虹屁弹窗 */}
-      <Modal
-        open={complimentModalOpen}
-        onOk={() => setComplimentModalOpen(false)}
-        onCancel={() => setComplimentModalOpen(false)}
-        title="🎉 欢迎来到 PandaEvo！"
-        okText="太棒了！"
-        cancelText="谢谢夸奖！"
-        centered
-        width={450}
-      >
-        <div style={{ textAlign: 'center', padding: '20px 0' }}>
-          <p style={{ fontSize: '18px', lineHeight: '1.8', color: token.colorText }}>
-            {currentCompliment}
-          </p>
-          <p style={{ fontSize: '14px', color: token.colorTextTertiary, marginTop: '16px' }}>
-            准备好开始今天的创造之旅了吗？💪
-          </p>
-        </div>
-      </Modal>
     </div>
   )
 }

@@ -20,7 +20,7 @@ def _discover_level(subdirs: list[str], root: Path, level: RuleLevel) -> dict[st
             continue
 
         for rule_file in directory.iterdir():
-            if not rule_file.is_file() or rule_file.suffix not in {".mdc", ".md"}:
+            if not rule_file.is_file() or rule_file.suffix not in {".mdp", ".md"}:
                 continue
 
             rule = load_rule(rule_file)

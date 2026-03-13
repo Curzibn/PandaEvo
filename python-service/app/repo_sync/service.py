@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 from app.coder.gitea import build_repo_clone_url
@@ -11,6 +12,8 @@ from app.config import (
 )
 from app.gitops import run_git
 from app.logger import get_logger
+
+_WORKSPACE_APPS = Path("/workspace/apps")
 
 logger = get_logger(__name__)
 
@@ -36,6 +39,18 @@ async def ensure_repo_synced(repo: str, target_root: Path, branch: str) -> None:
     if rc != 0:
         raise RuntimeError(f"pull failed for {repo}: {out}")
     logger.info("repo sync pull success repo=%s branch=%s", repo, branch)
+
+
+async def post_merge_sync(repo: str) -> None:
+    target_root = get_repo_sync_root()
+    branch = get_repo_sync_branch()
+    await ensure_repo_synced(repo, target_root, branch)
+
+    src = target_root / repo
+    dst = _WORKSPACE_APPS / repo
+    dst.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git"))
+    logger.info("post merge sync done repo=%s", repo)
 
 
 async def startup_sync_repositories() -> None:
