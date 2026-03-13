@@ -23,9 +23,3 @@ jobs:
           git -C /workspace/apps config user.email "bootstrap@pandaevo.local"
           git -C /workspace/apps config user.name "PandaEvo Bootstrap"
           git -C /workspace/apps update-index --skip-worktree "$SKIP_WORKTREE_FILE" 2>/dev/null || true
-      - name: Install node deps
-        run: npm ci
-        working-directory: /workspace/apps/web-pc
-      - name: Install python deps
-        run: uv pip install --system -e .
-        working-directory: /workspace/apps/python-service
