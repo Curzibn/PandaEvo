@@ -4,7 +4,7 @@ database:
   url: postgresql+asyncpg://user:password@localhost:5432/pandaevo
 
 workspace:
-  root: "/"
+  root: "/workspace"
 
 service:
   data_dir: "/app/data"
@@ -34,10 +34,8 @@ gitea:
 
 repo_sync:
   enabled: true
-  root: "/apps/repos"
   repos:
-    - "python-service"
-    - "web-pc"
+    - "apps"
   branch: "main"
 
 orchestrator:

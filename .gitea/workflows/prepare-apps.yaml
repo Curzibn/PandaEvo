@@ -1,0 +1,46 @@
+name: prepare-apps
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:22.04
+      volumes:
+        - pandaevo_apps_workspace:/workspace/apps
+        - /var/run/docker.sock:/var/run/docker.sock
+    env:
+      SKIP_WORKTREE_FILE: python-service/config.yaml
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          apt-get update && apt-get install -y git curl docker.io
+          curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+          apt-get install -y nodejs
+          apt-get install -y python3 python3-pip
+          pip install uv
+      - name: Copy to workspace
+        run: |
+          cp -a . /workspace/apps/
+          git -C /workspace/apps config user.email "bootstrap@pandaevo.local"
+          git -C /workspace/apps config user.name "PandaEvo Bootstrap"
+          git -C /workspace/apps update-index --skip-worktree "$SKIP_WORKTREE_FILE" 2>/dev/null || true
+      - name: Install node deps
+        run: npm ci
+        working-directory: /workspace/apps/web-pc
+      - name: Install python deps
+        run: uv pip install --system -e .
+        working-directory: /workspace/apps/python-service
+      - name: Start apps container
+        run: docker compose -f /workspace/apps/docker-compose.apps.yaml -p pandaevo up -d apps
+        env:
+          GITEA_TOKEN: ${{ vars.APP_TOKEN }}
+          GITEA_ORG: ${{ vars.ORG_NAME || 'pandaevo' }}
+          EVOLUTION_ENABLED: ${{ vars.EVOLUTION_ENABLED || 'false' }}
+          HOST_PY_SERVICE_CONFIG: ${{ vars.HOST_PY_SERVICE_CONFIG }}
+          POSTGRES_PASSWORD: ${{ vars.POSTGRES_PASSWORD || 'pandaevo_dev' }}

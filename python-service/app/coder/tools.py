@@ -93,15 +93,17 @@ def _build_tree(p: Path, depth: int) -> dict[str, Any]:
 class CloneRepoTool(ToolDef):
     name = "clone_repo"
     description = (
-        "Clone a Gitea repository and create a new feature branch. "
+        "Clone a Gitea repository and create or checkout a branch. "
         "Must be called before any file operations. "
-        "Use list_repos first to discover the correct repository name."
+        "Use list_repos first to discover the correct repository name. "
+        "For retry rounds, set branch_exists=true to checkout the existing PR branch."
     )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "repo": {"type": "string", "description": "Repository name as returned by list_repos (e.g. pandaevo)"},
-            "branch": {"type": "string", "description": "New feature branch name (e.g. feat/add-caching)"},
+            "repo": {"type": "string", "description": "Repository name as returned by list_repos (e.g. apps)"},
+            "branch": {"type": "string", "description": "Branch name (e.g. feat/add-caching)"},
+            "branch_exists": {"type": "boolean", "description": "If true, checkout existing branch instead of creating new one (for retry)"},
         },
         "required": ["repo", "branch"],
     }
@@ -109,6 +111,7 @@ class CloneRepoTool(ToolDef):
     async def execute(self, args: dict[str, Any]) -> str:
         repo = args["repo"].strip()
         branch = args["branch"].strip()
+        branch_exists = bool(args.get("branch_exists", False))
 
         token = get_gitea_token()
         if not token:
@@ -131,16 +134,23 @@ class CloneRepoTool(ToolDef):
         await _run_git("config", "user.email", "coder@pandaevo.local", cwd=repo_path)
         await _run_git("config", "user.name", "PandaEvo Coder", cwd=repo_path)
 
-        rc, out = await _run_git("checkout", "-b", branch, cwd=repo_path)
+        if branch_exists:
+            rc, out = await _run_git("fetch", "origin", branch, cwd=repo_path)
+            if rc != 0:
+                shutil.rmtree(tmp, ignore_errors=True)
+                return f"Error: git fetch origin {branch} failed:\n{out}"
+            rc, out = await _run_git("checkout", branch, cwd=repo_path)
+        else:
+            rc, out = await _run_git("checkout", "-b", branch, cwd=repo_path)
         if rc != 0:
             shutil.rmtree(tmp, ignore_errors=True)
-            return f"Error: git checkout -b failed:\n{out}"
+            return f"Error: git checkout failed:\n{out}"
 
         _repo_ctx.set(repo_path)
         _branch_ctx.set(branch)
         _repo_name_ctx.set(repo)
 
-        return f"Cloned '{repo}' and created branch '{branch}'"
+        return f"Cloned '{repo}' and checked out branch '{branch}'"
 
 
 class ReadFileTool(ToolDef):
@@ -300,11 +310,15 @@ class EditFileTool(ToolDef):
 
 class CommitAndPushTool(ToolDef):
     name = "commit_and_push"
-    description = "Stage all changes, commit, and push the branch to Gitea."
+    description = (
+        "Stage all changes, commit, and push the branch to Gitea. "
+        "Set force=true for retry rounds to force-push and update the same PR."
+    )
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "message": {"type": "string", "description": "Commit message (Conventional Commits format recommended)"},
+            "force": {"type": "boolean", "description": "If true, use --force-with-lease when pushing (for retry)"},
         },
         "required": ["message"],
     }
@@ -332,7 +346,10 @@ class CommitAndPushTool(ToolDef):
                 )
             return _err("GIT_COMMIT_FAILED", f"git commit failed:\n{out}")
 
-        rc, out = await _run_git("push", "origin", branch, cwd=root)
+        if args.get("force"):
+            rc, out = await _run_git("push", "--force-with-lease", "origin", branch, cwd=root)
+        else:
+            rc, out = await _run_git("push", "origin", branch, cwd=root)
         if rc != 0:
             return _err("GIT_PUSH_FAILED", f"git push failed:\n{out}")
 

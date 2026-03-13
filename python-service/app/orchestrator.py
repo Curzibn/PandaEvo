@@ -76,6 +76,7 @@ class Task:
     prompt: str
     depends_on: list[str] = field(default_factory=list)
     type: str = "analysis"
+    prior_pr_artifact: dict[str, Any] | None = None
 
 
 @dataclass
@@ -269,11 +270,13 @@ async def _run_batch_concurrent(
             elif task.type == "coder":
                 prior = {tid: task_results[tid]["raw"] for tid in task.depends_on if tid in task_results}
                 stream = CoderAgent().run(
-                    task.id, task.prompt,
+                    task.id,
+                    task.prompt,
                     original_messages=messages,
                     prior_results=prior,
                     model=worker_model,
                     provider=worker_provider,
+                    prior_pr_artifact=task.prior_pr_artifact,
                 )
             else:
                 stream = run_worker(task.id, task.prompt, worker_model, worker_provider)
@@ -370,47 +373,96 @@ class OrchestratorAgent:
                 yield event
 
         if get_auto_trigger_evolution_after_pr() and not any(t.type == "evolution" for t in tasks):
-            extra_evolution_tasks: list[Task] = []
-            for task in tasks:
-                if task.type != "coder":
+            for coder_task in tasks:
+                if coder_task.type != "coder":
                     continue
-                normalized = task_results.get(task.id, {})
+                normalized = task_results.get(coder_task.id, {})
                 artifact = _extract_pr_artifact(normalized)
                 if not artifact:
                     continue
-                evo_id = f"{task.id}_evo"
-                extra_evolution_tasks.append(
-                    Task(
-                        id=evo_id,
-                        title=f"{task.title}-审查",
-                        type="evolution",
-                        depends_on=[],
-                        prompt=json.dumps(
-                            {
-                                "instruction": "请执行代码审查并给出是否可灰度发布结论。",
-                                "pr_context": {
-                                    "repo": artifact["repo"],
-                                    "branch": artifact["branch"],
-                                    "pr_number": artifact["pr_number"],
-                                    "pr_url": artifact["pr_url"],
-                                },
-                            },
-                            ensure_ascii=False,
-                        ),
-                    )
+                evo_prompt = json.dumps(
+                    {
+                        "instruction": "请执行代码审查并给出是否可灰度发布结论。",
+                        "pr_context": {
+                            "repo": artifact["repo"],
+                            "branch": artifact["branch"],
+                            "pr_number": artifact["pr_number"],
+                            "pr_url": artifact["pr_url"],
+                        },
+                    },
+                    ensure_ascii=False,
                 )
-            if extra_evolution_tasks:
-                tasks.extend(extra_evolution_tasks)
-                async for event in _run_batch_concurrent(
-                    extra_evolution_tasks,
-                    model,
-                    orchestrator_provider,
-                    worker_model,
-                    worker_provider,
-                    task_results,
-                    messages,
-                ):
-                    yield event
+                for round_num in range(1, 11):
+                    evo_id = f"{coder_task.id}_evo_r{round_num}"
+                    evo_task = Task(id=evo_id, title=f"{coder_task.title}-审查", type="evolution", prompt=evo_prompt)
+                    async for event in _run_batch_concurrent(
+                        [evo_task],
+                        model,
+                        orchestrator_provider,
+                        worker_model,
+                        worker_provider,
+                        task_results,
+                        messages,
+                    ):
+                        yield event
+                    evo_raw = task_results.get(evo_id, {}).get("raw", "")
+                    if "PR 已合并" in evo_raw or "审查通过" in evo_raw:
+                        yield {
+                            "type": "done",
+                            "status": "success",
+                            "new_message": {"role": "assistant", "content": "审查通过，新代码正在部署更新。"},
+                            "artifacts": {"prs": [artifact], "failed_tasks": []},
+                        }
+                        return
+                    if round_num >= 10:
+                        yield {
+                            "type": "done",
+                            "status": "failed",
+                            "new_message": {
+                                "role": "assistant",
+                                "content": "需求无法完成。已经过 10 轮审查修改，仍未通过，请简化需求或联系支持。",
+                            },
+                            "artifacts": {"prs": [], "failed_tasks": []},
+                        }
+                        return
+                    retry_id = f"{coder_task.id}_retry_r{round_num}"
+                    retry_prompt = (
+                        f"在上一轮改动基础上，根据以下审查拒绝原因定向修复：\n\n{evo_raw}\n\n"
+                        f"PR 分支：{artifact['branch']}。使用 clone_repo(repo={artifact['repo']!r}, "
+                        f"branch={artifact['branch']!r}, branch_exists=true)。修复后使用 commit_and_push(force=true)。"
+                    )
+                    retry_task = Task(
+                        id=retry_id,
+                        title=f"{coder_task.title}-重试{round_num}",
+                        type="coder",
+                        prompt=retry_prompt,
+                        prior_pr_artifact=artifact,
+                    )
+                    async for event in _run_batch_concurrent(
+                        [retry_task],
+                        model,
+                        orchestrator_provider,
+                        worker_model,
+                        worker_provider,
+                        task_results,
+                        messages,
+                    ):
+                        yield event
+                    retry_norm = task_results.get(retry_id, {})
+                    if not retry_norm.get("success"):
+                        yield {
+                            "type": "done",
+                            "status": "failed",
+                            "new_message": {
+                                "role": "assistant",
+                                "content": "需求无法完成。重试修改失败，请简化需求或联系支持。",
+                            },
+                            "artifacts": {"prs": [], "failed_tasks": []},
+                        }
+                        return
+                    new_artifact = _extract_pr_artifact(retry_norm)
+                    if new_artifact:
+                        artifact = new_artifact
 
         if (
             len(tasks) == 1

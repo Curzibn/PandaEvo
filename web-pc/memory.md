@@ -27,6 +27,7 @@
 - API 客户端分文件：`chat.ts`（会话/流式对话/文件树与上传下载/导出）、`providers.ts`（提供商）、`purposes.ts`（用途模型绑定）、`mcp.ts`（MCP 服务器管理）、`skills.ts`（技能配置）
 - 持久化状态用 `localStorage`，多组件共享用 Context API 或 Props 提升
 - 流式 API 函数必须返回 `AbortController` 以支持取消
+- RunSummary 新增 `evolutionDisabledWarning` 字段，用于展示演化关闭时的提前提示
 
 ## SSE 事件类型（后端 → 前端）
 
@@ -34,6 +35,7 @@
 |---|---|
 | `plan` | 任务计划卡片 |
 | `route` | 路由决策展示（`direct`/`orchestrator`） |
+| `evolution_disabled_warning` | 演化关闭提示 Alert |
 | `worker_start`/`worker_event`/`worker_done` | Worker 生命周期标记 |
 | `thinking` | Thinking 组件 |
 | `token` | 实时追加到消息内容 |

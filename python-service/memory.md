@@ -18,6 +18,7 @@
 - [2026-03-12] Provider 与 Purpose 解耦：`provider_models` 仅维护模型归属，`purpose_models` 维护用途候选与排序
 - [2026-03-10] 文件系统访问必须通过 `safe_path()`，禁止越界到工作区外
 - [2026-03-12] `EvolutionAgent._build_payload()` 在 prompt 为 JSON 格式时，将 `instruction` 作为实际 prompt，并将 `pr_context`（repo/branch/pr_number/pr_url）追加到 prompt 末尾，确保 evolution-core LLM 可从 prompt 中读取 PR 元数据并正确调用 `canary_deploy`
+- [2026-03-13] EvolutionAgent 在构建 payload 前调用 Gitea API `GET /api/v1/repos/{org}/{repo}/pulls/{pr_number}.diff` 拉取 PR 代码变更，注入 prompt 的「## PR 代码变更」段落；拉取失败时追加「PR diff 获取失败：{error}」；diff 超过 50KB 时截断并注明
 - [2026-03-13] 演化配置来源统一为 Tauri `evolution-config.json`；`get_evolution_enabled()` 读取 `EVOLUTION_ENABLED` 环境变量；orchestrator 模式下若演化关闭且 `auto_trigger_evolution_after_pr` 为真，chat 流会先 yield `evolution_disabled_warning` 事件；EvolutionAgent 对 evolution-core 403 响应会 yield 明确错误信息
 - [2026-03-13] 规则注入管道扩展到路由层与规划层：`decide_route()` 通过 `_build_route_system()`、`OrchestratorAgent.run()` 通过 `integrate_rules()` 将 `alwaysApply` 规则注入系统提示，Agent 路由与规划意图由 LLM 基于规则语义判断，不再依赖枚举正则
 - [2026-03-13] PandaEvo 规则文件格式为 `.mdp`（区别于 Cursor IDE 的 `.mdc`），`discovery.py` 扩展名白名单为 `{".mdp", ".md"}`，系统规则目录为 `AppData/rules/`（由 `config.yaml` `service.data_dir` 决定）
@@ -52,7 +53,7 @@
 
 ## 运行约束与经验
 
-- 聊天流包含 `route` 事件与最终 `done` 事件；orchestrator 模式会持久化 `plan` 并回写状态
+- 聊天流包含 `route` 事件与最终 `done` 事件；orchestrator 模式会持久化 `plan` 并回写状态；新增 `evolution_disabled_warning` 事件（演化关闭时在 route 之后、event_stream 之前 yield）
 - `@path` 引用会在入站消息阶段展开为文件内容，路径校验失败或非文件会原样保留
 - MCP 配置来源区分 `builtin`/`yaml`/`db`，仅 `db` 来源允许 API 修改或删除
 - 新增路由必须在 `main.py` 显式 `include_router`，新增数据结构变更必须配套 SQL migration
@@ -60,3 +61,4 @@
 - `agent.py` 的 `_build_system_prompt()` 已将 Agent 身份改为「PandaEvo 内置 Agent」，并明确 `apps/` 是平台运行层源码可直接读写修改；功能需求类请求不应以「做不到」拒绝
 - `is_code_intent_request()` 正则已精简为仅匹配明确 Gitea 操作词（`commit/pull request/gitea`），功能需求路由判断完全交由注入规则后的 LLM 语义处理
 - CoderAgent 依赖 Gitea Token 具备 read:organization scope，否则 list_repos 失败导致 PR 无法创建；uvicorn 需使用 uvicorn[standard] 以支持 WebSocket /ws 端点
+- [2026-03-13] Gitea 仅保留单一 apps 仓库（含 python-service、web-pc 子目录）；CoderAgent 使用独立临时 clone，不写入 /workspace/apps；重试时 clone_repo(branch_exists=true)、commit_and_push(force=true)；演化循环最多 10 轮，通过固定文案「审查通过，新代码正在部署更新」，10 轮仍拒绝固定文案「需求无法完成」

@@ -220,11 +220,11 @@ def get_repo_sync_root() -> Path:
 
 
 def get_repo_sync_repos() -> list[str]:
-    repos = _cfg.get("repo_sync", {}).get("repos", ["python-service", "web-pc"])
+    repos = _cfg.get("repo_sync", {}).get("repos", ["apps"])
     if not isinstance(repos, list):
-        return ["python-service", "web-pc"]
+        return ["apps"]
     clean = [str(repo).strip() for repo in repos if str(repo).strip()]
-    return clean or ["python-service", "web-pc"]
+    return clean or ["apps"]
 
 
 def get_repo_sync_branch() -> str:

@@ -13,22 +13,21 @@ _MAX_ROUNDS = 50
 _SYSTEM = """\
 你是一名资深全栈程序员，负责根据任务描述对本系统的应用服务代码进行修改，并通过 Gitea 创建 PR 进入代码审查流程。
 
-应用仓库默认是 python-service 和 web-pc，运行时会在服务启动阶段从 Gitea 拉取到容器目录。
-调用 list_repos 可获取仓库实际名称。
+应用仓库为 apps（含 python-service、web-pc 子目录）。调用 list_repos 可确认。
 
 ## 工作流程
 
-1. 调用 list_repos 确认目标仓库名称（通常为 python-service 或 web-pc）
-2. 调用 clone_repo 克隆该仓库并创建功能分支
-3. 使用 list_dir / read_file / search_files 深入理解现有代码结构和设计模式
-4. 使用 write_file / edit_file 实现代码变更（严格遵循现有代码风格）
-5. 调用 commit_and_push 提交变更并推送分支
-6. 调用 create_pr 创建 PR，标题和描述须清晰说明变更内容和原因
+1. 调用 list_repos 确认目标仓库（通常为 apps）
+2. 调用 clone_repo 克隆并创建功能分支；若为审查重试轮次，使用 branch_exists=true 拉取已有 PR 分支
+3. 使用 list_dir / read_file / search_files 理解代码结构
+4. 使用 write_file / edit_file 实现变更（严格遵循现有风格）
+5. 调用 commit_and_push 提交并推送；重试轮次须传 force=true 以更新同一 PR
+6. 调用 create_pr 创建 PR（首轮）；重试轮次无需 create_pr，直接推送即可
 
 ## 约束
 
-- 代码须高内聚、低耦合，遵循现有模块的设计模式
-- 引入新依赖时必须同步更新 pyproject.toml，使用 >= 约束而非固定版本
+- 代码须高内聚、低耦合，遵循现有模块设计模式
+- 引入新依赖时同步更新 pyproject.toml，使用 >= 约束
 - 禁止添加无意义注释，代码应自说明"""
 
 
@@ -87,6 +86,7 @@ class CoderAgent:
         prior_results: dict[str, str],
         model: str,
         provider: ProviderLike,
+        prior_pr_artifact: dict[str, Any] | None = None,
     ) -> AsyncGenerator[dict[str, Any], None]:
         yield {"type": "worker_start", "task_id": task_id}
 
@@ -121,7 +121,8 @@ class CoderAgent:
                 if not tool_calls:
                     content = response.get("content", "")
                     messages.append({"role": "assistant", "content": content})
-                    if pr_artifact is None:
+                    effective_artifact = pr_artifact or prior_pr_artifact
+                    if effective_artifact is None:
                         fail_payload = {
                             "success": False,
                             "code": "PR_NOT_CREATED",
@@ -136,7 +137,7 @@ class CoderAgent:
                     result_payload = {
                         "success": True,
                         "code": "CODER_COMPLETED_WITH_PR",
-                        "data": pr_artifact,
+                        "data": effective_artifact,
                         "message": "".join(result_parts) or content,
                     }
                     yield {
@@ -185,11 +186,12 @@ class CoderAgent:
 
                     messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
 
-                if pr_artifact is not None:
+                effective = pr_artifact or prior_pr_artifact
+                if effective is not None:
                     result_payload = {
                         "success": True,
                         "code": "CODER_COMPLETED_WITH_PR",
-                        "data": pr_artifact,
+                        "data": effective,
                     }
                     yield {
                         "type": "worker_done",
