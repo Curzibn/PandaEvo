@@ -16,7 +16,14 @@ jobs:
     env:
       SKIP_WORKTREE_FILE: python-service/config.yaml
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        run: |
+          apt-get update && apt-get install -y git
+          git clone --depth 1 --branch main http://token:${{ vars.APP_TOKEN }}@gitea:3000/pandaevo/apps.git /tmp/repo
+          cp -a /tmp/repo/. /workspace/apps/
+          git -C /workspace/apps config user.email "bootstrap@pandaevo.local"
+          git -C /workspace/apps config user.name "PandaEvo Bootstrap"
+          git -C /workspace/apps update-index --skip-worktree "$SKIP_WORKTREE_FILE" 2>/dev/null || true
       - name: Install tools
         run: |
           apt-get update && apt-get install -y git curl docker.io
@@ -24,12 +31,6 @@ jobs:
           apt-get install -y nodejs
           apt-get install -y python3 python3-pip
           pip install uv
-      - name: Copy to workspace
-        run: |
-          cp -a . /workspace/apps/
-          git -C /workspace/apps config user.email "bootstrap@pandaevo.local"
-          git -C /workspace/apps config user.name "PandaEvo Bootstrap"
-          git -C /workspace/apps update-index --skip-worktree "$SKIP_WORKTREE_FILE" 2>/dev/null || true
       - name: Install node deps
         run: npm ci
         working-directory: /workspace/apps/web-pc
