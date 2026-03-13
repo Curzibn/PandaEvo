@@ -1,0 +1,25 @@
+{
+  "projectName": "PandaEvo",
+  "projectOwner": "Curzibn",
+  "repoType": "github",
+  "files": ["README.md"],
+  "imageSize": 80,
+  "contributorsPerLine": 7,
+  "contributorsSortAlphabetically": false,
+  "types": {
+    "star": {
+      "symbol": "⭐",
+      "description": "First stargazer",
+      "link": "<%= contributor.profile %>"
+    }
+  },
+  "contributors": [
+    {
+      "login": "SuperHunger",
+      "name": "SuperHunger",
+      "avatar_url": "https://avatars.githubusercontent.com/u/16043546?v=4",
+      "profile": "https://github.com/SuperHunger",
+      "contributions": ["star"]
+    }
+  ]
+}

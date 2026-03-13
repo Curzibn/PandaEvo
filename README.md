@@ -202,6 +202,26 @@ pnpm dev
 
 感谢您的支持！🙏
 
+## Contributors
+
+感谢以下贡献者的支持！
+
+<!-- ALL-CONTRIBUTORS-LIST:START -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/SuperHunger"><img src="https://avatars.githubusercontent.com/u/16043546?v=4?s=80" width="80px;" alt="SuperHunger"/><br /><sub><b>SuperHunger</b></sub></a><br /><a href="https://github.com/SuperHunger" title="First stargazer">⭐</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
 ## 开源协议
 
 本项目 `apps/` 子目录采用 [MIT License](LICENSE)。
