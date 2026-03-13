@@ -202,6 +202,26 @@ If this project has been helpful to you, please consider supporting my work thro
 
 Thank you for your support! 🙏
 
+## Contributors
+
+Thanks to the following contributors for their support!
+
+<!-- ALL-CONTRIBUTORS-LIST:START -->
+<!-- prettier-ignore-start -->
+<!-- markdownlint-disable -->
+<table>
+  <tbody>
+    <tr>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/SuperHunger"><img src="https://avatars.githubusercontent.com/u/16043546?v=4?s=80" width="80px;" alt="SuperHunger"/><br /><sub><b>SuperHunger</b></sub></a><br /><a href="https://github.com/SuperHunger" title="Thank you for donation">☕️</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- markdownlint-restore -->
+<!-- prettier-ignore-end -->
+
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
 ## License
 
 The `apps/` subproject is licensed under the [MIT License](LICENSE).

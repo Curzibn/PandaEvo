@@ -8,8 +8,8 @@
   "contributorsSortAlphabetically": false,
   "types": {
     "star": {
-      "symbol": "⭐",
-      "description": "First stargazer",
+      "symbol": "☕️",
+      "description": "感谢捐赠",
       "link": "<%= contributor.profile %>"
     }
   },

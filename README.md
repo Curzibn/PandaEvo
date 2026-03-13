@@ -212,7 +212,7 @@ pnpm dev
 <table>
   <tbody>
     <tr>
-      <td align="center" valign="top" width="14.28%"><a href="https://github.com/SuperHunger"><img src="https://avatars.githubusercontent.com/u/16043546?v=4?s=80" width="80px;" alt="SuperHunger"/><br /><sub><b>SuperHunger</b></sub></a><br /><a href="https://github.com/SuperHunger" title="First stargazer">⭐</a></td>
+      <td align="center" valign="top" width="14.28%"><a href="https://github.com/SuperHunger"><img src="https://avatars.githubusercontent.com/u/16043546?v=4?s=80" width="80px;" alt="SuperHunger"/><br /><sub><b>SuperHunger</b></sub></a><br /><a href="https://github.com/SuperHunger" title="感谢捐赠">☕️</a></td>
     </tr>
   </tbody>
 </table>
