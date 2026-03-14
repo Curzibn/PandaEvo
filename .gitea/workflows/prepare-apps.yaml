@@ -9,7 +9,7 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     container:
-      image: pandaevo/base:latest
+      image: pandaevo/apps-base:latest
       volumes:
         - pandaevo_apps_workspace:/workspace/apps
     env:
@@ -17,7 +17,6 @@ jobs:
     steps:
       - name: Checkout
         run: |
-          apt-get update && apt-get install -y git
           git clone --depth 1 --branch main http://token:${{ vars.APP_TOKEN }}@gitea:3000/pandaevo/apps.git /tmp/repo
           cp -a /tmp/repo/. /workspace/apps/
           git -C /workspace/apps config user.email "bootstrap@pandaevo.local"
