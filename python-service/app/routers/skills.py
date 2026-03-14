@@ -245,10 +245,10 @@ async def update_skill_config(name: str, body: SkillConfigUpdate) -> None:
     import yaml
     from pathlib import Path
     
-    config_dev_path = Path(__file__).parent.parent / "config-dev.yaml"
+    config_path = Path(__file__).parent.parent / "config.yaml"
     config_data = {}
-    if config_dev_path.exists():
-        with config_dev_path.open(encoding="utf-8") as f:
+    if config_path.exists():
+        with config_path.open(encoding="utf-8") as f:
             config_data = yaml.safe_load(f) or {}
     
     if "skills" not in config_data:
@@ -271,7 +271,7 @@ async def update_skill_config(name: str, body: SkillConfigUpdate) -> None:
     if body.config is not None:
         entry["config"] = body.config
     
-    with config_dev_path.open("w", encoding="utf-8") as f:
+    with config_path.open("w", encoding="utf-8") as f:
         yaml.dump(config_data, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
 
 

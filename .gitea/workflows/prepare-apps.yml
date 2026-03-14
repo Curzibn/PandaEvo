@@ -1,0 +1,41 @@
+name: prepare-apps
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    container:
+      image: docker:git
+      volumes:
+        - pandaevo_apps_workspace:/workspace/apps
+
+    steps:
+      - name: Sync code to workspace
+        run: |
+          rm -rf /workspace/apps/* /workspace/apps/.git 2>/dev/null || true
+          git clone --depth=1 http://token:${{ secrets.APP_TOKEN }}@gitea:3000/pandaevo/apps.git /workspace/apps
+
+      - name: Start or restart apps container
+        run: |
+          if docker ps -a --format '{{.Names}}' | grep -q '^pandaevo-apps-1$'; then
+            docker restart pandaevo-apps-1
+          else
+            docker run -d \
+              --name pandaevo-apps-1 \
+              --network pandaevo_internal \
+              -p 10600:10600 \
+              -p 10601:10601 \
+              -v pandaevo_apps_workspace:/workspace/apps \
+              -v pandaevo_apps_web_node_modules:/workspace/apps/web-pc/node_modules \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              -e GITEA_TOKEN="${{ secrets.APP_TOKEN }}" \
+              -e GITEA_URL="http://gitea:3000" \
+              -e GITEA_ORG="pandaevo" \
+              -e EVOLUTION_ENABLED="${{ vars.EVOLUTION_ENABLED }}" \
+              pandaevo/apps-base:latest
+          fi

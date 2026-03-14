@@ -7,7 +7,7 @@
 - 依赖管理：`uv` + `pyproject.toml`（统一使用 `>=` 下限约束）
 - 关键依赖：`fastapi`、`sqlalchemy[asyncio]`、`asyncpg`、`litellm`、`mcp`、`httpx`、`docker`
 - 运行端口：`10600`
-- 配置合并：`config.yaml` → `config-dev.yaml` → 环境变量
+- 配置：仅 `config.yaml`，环境变量可覆盖部分项
 
 ## 架构决策
 

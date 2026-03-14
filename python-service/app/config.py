@@ -15,21 +15,8 @@ def _load_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
-def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    result = dict(base)
-    for k, v in override.items():
-        if isinstance(v, dict) and isinstance(result.get(k), dict):
-            result[k] = _merge(result[k], v)
-        else:
-            result[k] = v
-    return result
-
-
 _ROOT = Path(__file__).parent.parent
-_cfg: dict[str, Any] = _merge(
-    _load_yaml(_ROOT / "config.yaml"),
-    _load_yaml(_ROOT / "config-dev.yaml"),
-)
+_cfg: dict[str, Any] = _load_yaml(_ROOT / "config.yaml")
 
 
 def get_database_url() -> str:
@@ -55,10 +42,6 @@ def get_service_data_dir() -> Path:
     if raw:
         return Path(raw).resolve()
     return Path.home() / ".pandaevo"
-
-
-def get_env() -> str:
-    return _cfg.get("env", "prod")
 
 
 @dataclass
